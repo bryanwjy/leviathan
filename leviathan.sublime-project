@@ -1,0 +1,20 @@
+{
+	"folders":
+	[
+		{
+			"path": "."
+		}
+	],
+	"settings":
+	{
+		"tab_size": 4,
+		"ClangFormat":
+		{
+			"format_on_save":true,
+			"style": "File",
+		},
+	},
+	"syntax_override": {
+		".*\\.(hpp|cpp)$": ["C++", "UTL"],
+	}
+}

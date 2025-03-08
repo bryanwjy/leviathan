@@ -212,7 +212,7 @@ requires requires {
     typename initializer_arguments_t<T>;
     requires std::is_void_v<initializer_arguments_t<T>>;
 }
-result_code initialize(non_owning_ptr<T> ptr) noexcept {
+result_code initialize(unmanaged_ptr<T> ptr) noexcept {
     using result_type = initializer_result_t<T>;
     if constexpr (std::is_same_v<result_type, result_code>) {
         return ptr->init<initializer_decorator<T>::value, result_type>();
@@ -240,7 +240,7 @@ requires requires {
     typename initializer_arguments_t<T>;
 }
 result_code initialize(
-    non_owning_ptr<T> ptr, initializer_arguments_t<T>&& tuple) noexcept {
+    unmanaged_ptr<T> ptr, initializer_arguments_t<T>&& tuple) noexcept {
     using result_type = initializer_result_t<T>;
     if constexpr (std::is_same_v<result_type, result_code>) {
         return ptr->init<initializer_decorator<T>::value, result_code>(

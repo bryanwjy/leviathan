@@ -112,8 +112,8 @@ concept convertible_from_pyobject =
 
 namespace native_conversions {
 
-LEV_HIDDEN [[gnu::noinline]] void raise_invalid_type(
-    non_owning_ptr<PyObject> ptr) noexcept {
+LEV_HIDDEN [[gnu::noinline]] inline void raise_invalid_type(
+    unmanaged_ptr<PyObject> ptr) noexcept {
     PyErr_Format(PyExc_TypeError,
         "Argument conversion failed, Reason=[Unexpected argument type], "
         "Type=[%s]",
@@ -122,22 +122,22 @@ LEV_HIDDEN [[gnu::noinline]] void raise_invalid_type(
 
 template <pyobj_type T>
 requires (!std::same_as<PyObject> &&
-    requires(non_owning_ptr<PyObject> ptr) { dynamic_ptr_cast(ptr); })
-LEV_HIDDEN inline T* from_pyobject(non_owning_ptr<PyObject> ptr) noexcept {
+    requires(unmanaged_ptr<PyObject> ptr) { dynamic_ptr_cast(ptr); })
+LEV_HIDDEN inline T* from_pyobject(unmanaged_ptr<PyObject> ptr) noexcept {
     return dynamic_ptr_cast<T>(ptr);
 }
 
 template <std::same_as<PyObject> T>
-LEV_HIDDEN inline T* from_pyobject(non_owning_ptr<T> ptr) noexcept {
+LEV_HIDDEN inline T* from_pyobject(unmanaged_ptr<T> ptr) noexcept {
     return ptr;
 }
 
 template <typename T>
-LEV_HIDDEN inline T from_pyobject(non_owning_ptr<PyUnicodeObject> src) noexcept;
+LEV_HIDDEN inline T from_pyobject(unmanaged_ptr<PyUnicodeObject> src) noexcept;
 
 template <>
 LEV_HIDDEN inline T from_pyobject<std::string_view>(
-    non_owning_ptr<PyUnicodeObject> src) noexcept {
+    unmanaged_ptr<PyUnicodeObject> src) noexcept {
     if (PyUnicode_KIND(src) == PyUnicode_1BYTE_KIND) [[likely]] {
         Py_ssize_t size = 0;
         auto str = PyUnicode_AsUTF8AndSize(src, &size);
@@ -150,7 +150,7 @@ LEV_HIDDEN inline T from_pyobject<std::string_view>(
 
 template <>
 LEV_HIDDEN inline char from_pyobject<char>(
-    non_owning_ptr<PyUnicodeObject> src) noexcept {
+    unmanaged_ptr<PyUnicodeObject> src) noexcept {
     if (PyUnicode_KIND(src) == PyUnicode_1BYTE_KIND) {
         return *PyUnicode_AsUTF8(src);
     }
@@ -159,14 +159,14 @@ LEV_HIDDEN inline char from_pyobject<char>(
 }
 
 template <std::floating_point T>
-LEV_HIDDEN inline T from_pyobject(non_owning_ptr<PyFloatObject> src) noexcept {
+LEV_HIDDEN inline T from_pyobject(unmanaged_ptr<PyFloatObject> src) noexcept {
     return static_cast<T>(PyFloat_AS_DOUBLE(src));
 }
 
 template <std::floating_point T>
-LEV_HIDDEN inline T from_pyobject(non_owning_ptr<PyObject> ptr) noexcept {
+LEV_HIDDEN inline T from_pyobject(unmanaged_ptr<PyObject> ptr) noexcept {
     auto value = PyFloat_AsDouble(src);
-    if (value == -1.0 && PyErr_Occurred()) [[unlikely]] {
+    if (value == -1.0 && PyErr_Occurred()) {
         return std::numeric_limits<T>::quiet_NaN();
     }
 
@@ -174,11 +174,11 @@ LEV_HIDDEN inline T from_pyobject(non_owning_ptr<PyObject> ptr) noexcept {
 }
 
 template <typename T>
-LEV_HIDDEN inline T from_pyobject(non_owning_ptr<PyObject> ptr) noexcept;
+LEV_HIDDEN inline T from_pyobject(unmanaged_ptr<PyObject> ptr) noexcept;
 
 template <>
 LEV_HIDDEN inline std::string_view from_pyobject<std::string_view>(
-    non_owning_ptr<PyObject> src) noexcept {
+    unmanaged_ptr<PyObject> src) noexcept {
     if (auto str = dynamic_ptr_cast<PyUnicodeObject>(src)) {
         return from_pyobject<T>(str);
     }
@@ -195,7 +195,7 @@ LEV_HIDDEN inline std::string_view from_pyobject<std::string_view>(
 
 template <>
 LEV_HIDDEN inline char from_pyobject<char>(
-    non_owning_ptr<PyObject> src) noexcept {
+    unmanaged_ptr<PyObject> src) noexcept {
     if (auto ptr = dynamic_ptr_cast<PyLongObject>(src)) {
         return from_pyobject<char>(ptr);
     }
@@ -210,15 +210,15 @@ LEV_HIDDEN inline char from_pyobject<char>(
 
 template <>
 LEV_HIDDEN inline bool from_pyobject<bool>(
-    non_owning_ptr<PyObject> src) noexcept {
+    unmanaged_ptr<PyObject> src) noexcept {
     return PyObject_IsTrue(src);
 }
 
 template <std::unsigned_integral T>
-LEV_HIDDEN inline T from_pyobject(non_owning_ptr<PyLongObject> src) noexcept {
+LEV_HIDDEN inline T from_pyobject(unmanaged_ptr<PyLongObject> src) noexcept {
     static constexpr auto kInvalid = static_cast<unsigned long long>(-1);
     auto value = PyLong_AsUnsignedLongLong(src);
-    if (value == kInvalid && PyErr_Occurred()) [[unlikely]] {
+    if (value == kInvalid && PyErr_Occurred()) {
         return false;
     }
 
@@ -226,10 +226,10 @@ LEV_HIDDEN inline T from_pyobject(non_owning_ptr<PyLongObject> src) noexcept {
 }
 
 template <std::signed_integral T>
-LEV_HIDDEN inline T from_pyobject(non_owning_ptr<PyLongObject> src) noexcept {
+LEV_HIDDEN inline T from_pyobject(unmanaged_ptr<PyLongObject> src) noexcept {
     static constexpr auto kInvalid = static_cast<signed long long>(-1);
     auto value = PyLong_AsLongLong(src);
-    if (value == kInvalid && PyErr_Occurred()) [[unlikely]] {
+    if (value == kInvalid && PyErr_Occurred()) {
         return false;
     }
 
@@ -237,7 +237,7 @@ LEV_HIDDEN inline T from_pyobject(non_owning_ptr<PyLongObject> src) noexcept {
 }
 
 template <std::integral T>
-LEV_HIDDEN inline T from_pyobject(non_owning_ptr<PyObject> src) noexcept {
+LEV_HIDDEN inline T from_pyobject(unmanaged_ptr<PyObject> src) noexcept {
     if (auto ptr = dynamic_ptr_cast<PyLongObject>(src)) {
         return from_pyobject<T>(ptr);
     }
@@ -254,48 +254,44 @@ LEV_HIDDEN inline constexpr bool is_variant_v<std::variant<Ts...>> = true;
 namespace details {
 template <typename Type, typename... Ts>
 LEV_HIDDEN inline bool try_emplace(
-    std::variant<Ts...>& variant, non_owning_ptr<PyObject> ptr) noexcept {
-    try {
-        variant.emplace<Type>(from_pyobject<Type>(ptr));
-    } catch (std::exception const& error) {
-        return false;
-    } catch (...) {
-        return false;
+    std::variant<Ts...>& variant, unmanaged_ptr<PyObject> ptr) noexcept {
+    static_assert(noexcept(variant.emplace<Type>(from_pyobject<Type>(ptr))),
+        "Variant Types must be nothrow convertible from pyobject");
+
+    variant.emplace<Type>(from_pyobject<Type>(ptr));
+    if (!PyErr_Occurred()) {
+        return true;
     }
 
-    if (PyErr_Occurred()) {
-        PyErr_Clear();
-        return false;
-    }
-
-    return true;
+    PyErr_Clear();
+    return false;
 }
 
 } // namespace details
 
 template <typename T>
-requires (is_variant_v<T> &&
-    (std::is_nothrow_default_constructible_v<T> ||
-        std::same_as<std::variant_alternative_t<0, T>, std::monostate>))
-LEV_HIDDEN inline T from_pyobject(non_owning_ptr<PyObject> src) noexcept {
-
+requires (is_variant_v<T> && std::is_nothrow_default_constructible_v<T>)
+LEV_HIDDEN inline T from_pyobject(unmanaged_ptr<PyObject> src) noexcept {
     T output;
-    if constexpr (std::same_as<std::variant_alternative_t<0, T>,
-                      std::monostate>) {
-        auto success = []<typename... Ts>(
-                           std::variant<std::monostate, Ts...>& output) {
-            return (... || details::try_emplace<Ts>(output, src));
-        }(output);
-        if (!success) {
-            raise_invalid_type(src);
+    auto success = [&]<size_t I, size_t... Is>(std::index_sequence<I, Is...>) {
+        if constexpr (!std::same_as<std::variant_alternative_t<0, T>,
+                          std::monostate>) {
+            if (details::try_emplace<std::variant_alternative_t<I, T>>(
+                    output, src)) {
+                return true;
+            }
         }
-    } else {
-        auto success = []<typename... Ts>(std::variant<Ts...>& output) {
-            return (... || details::try_emplace<Ts>(src));
-        }(output);
+
+        return (... ||
+            details::try_emplace<std::variant_alternative_t<Is, T>>(
+                output, src));
+    }(std::make_index_sequence<std::variant_size_v<T>>{});
+
+    if (!success) {
+        raise_invalid_type(src);
     }
 
-    return output;
+    return T{};
 }
 
 } // namespace native_conversions

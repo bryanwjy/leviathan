@@ -6,10 +6,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace lev::string {
-
-namespace details {
-
+namespace lev::string::details {
 template <size_t N>
 struct pyliteral {
     PyASCIIObject ob_base;
@@ -80,52 +77,39 @@ private:
     consteval literal(char const (&str)[N], std::index_sequence<Is...>) noexcept
         : data{str[Is]...} {}
 };
+} // namespace lev::string::details
 
-template <auto S>
-struct LEV_PUBLIC static_storage {
-    // we cannot const this because python can initializes the hash value to -1
-    // and updates to the actual hash value only when it is needed at runtime
-    static inline constinit std::remove_const_t<decltype(S)> value = S;
-};
-} // namespace details
-
-namespace literals {
-template <details::pyliteral S>
+namespace lev {
+inline namespace literals {
+inline namespace string_literals {
+template <string::details::pyliteral S>
 inline consteval decltype(auto) operator""_pystr() noexcept {
-    return std::as_const(details::static_storage<S>::value);
+    return std::as_const(static_storage<S>::value);
 }
 
-template <details::literal S>
+template <string::details::literal S>
 inline consteval auto operator""_str() noexcept {
     return S;
 }
+} // namespace string_literals
 } // namespace literals
-} // namespace lev::string
 
-namespace lev {
 template <typename T>
 LEV_HIDDEN inline constexpr bool is_string_literal_v = false;
 template <typename T>
 LEV_HIDDEN inline constexpr bool is_pystring_literal_v = false;
 
 template <size_t N>
-LEV_HIDDEN inline constexpr bool
-    is_string_literal_v<string::literals::literal<N>> = true;
+LEV_HIDDEN inline constexpr bool is_string_literal_v<string::literal<N>> = true;
 template <size_t N>
-LEV_HIDDEN inline constexpr bool
-    is_pystring_literal_v<string::literals::pyliteral<N>> = true;
+LEV_HIDDEN inline constexpr bool is_pystring_literal_v<string::pyliteral<N>> =
+    true;
 
 template <typename T>
 concept string_literal = is_string_literal_v<T>;
 template <typename T>
 concept pystring_literal = is_pystring_literal_v<T>;
-} // namespace lev
 
-namespace lev::literals {
-using namespace lev::string::literals;
-}
-
-namespace lev {
 class string_hash_t {
     static constexpr uint32_t kPrime = 0x1000193U;
     static constexpr uint32_t kOffsetBasis = 0x811C9DC5U;
@@ -180,7 +164,8 @@ namespace lev::details {
 template <typename>
 struct first_member_object_of;
 // partial specialization because pyliteral does not meet the requirements
-// of an aggregate type
+// of an aggregate type, which is required for leviathan's basic pyobject
+// hierarchy exploration
 template <size_t N>
 struct first_member_object_of<::lev::string::pyliteral<N>> {
     using type = PyASCIIObject;

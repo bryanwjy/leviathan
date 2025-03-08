@@ -19,6 +19,22 @@ LEV_HIDDEN [[nodiscard]] inline constexpr T exchange(
     return previous;
 }
 
+template <auto S>
+struct static_storage {
+    // we cannot const this because python can initializes the hash value to -1
+    // and updates to the actual hash value only when it is needed at runtime
+    LEV_HIDE_INSTANTIATION static inline constinit std::remove_const_t<
+        decltype(S)>
+        value = S;
+};
+
+template <auto S>
+struct LEV_PUBLIC public_static_storage {
+    // we cannot const this because python can initializes the hash value to -1
+    // and updates to the actual hash value only when it is needed at runtime
+    static inline constinit std::remove_const_t<decltype(S)> value = S;
+};
+
 template <typename AdaptorType>
 consteval bool always_false() noexcept {
     return false;
@@ -28,46 +44,6 @@ template <typename AdaptorType>
 consteval bool always_true() noexcept {
     return true;
 }
-
-template <typename...>
-struct typelist {};
-
-template <typename From, typename To>
-struct copy_cv {
-    using type = To;
-};
-
-template <typename From, typename To>
-using copy_cv_t = copy_cv<From, To>;
-
-template <typename From, typename To>
-struct copy_cv<From const, To> {
-    using type = To const;
-};
-
-template <typename From, typename To>
-struct copy_cv<From const volatile, To> {
-    using type = To const volatile;
-};
-
-template <typename From, typename To>
-struct copy_cv<From volatile, To> {
-    using type = To volatile;
-};
-
-template <typename From, typename To>
-struct copy_cvref : copy_cv<From, To> {};
-
-template <typename From, typename To>
-using copy_cvref_t = copy_cvref<From, To>;
-
-template <typename From, typename To>
-struct copy_cvref<From&, To> :
-    std::add_lvalue_reference<copy_cv_t<From, To>> {};
-
-template <typename From, typename To>
-struct copy_cvref<From&&, To> :
-    std::add_rvalue_reference<copy_cv_t<From, To>> {};
 
 template <typename T, typename U>
 LEV_HIDDEN [[nodiscard]] constexpr auto forward_like(U&& u) noexcept
@@ -152,7 +128,7 @@ LEV_HIDE_INSTANTIATION auto as_pyobject(T* ptr) noexcept(
 }
 
 LEV_HIDDEN std::span<PyObject* const> to_span(
-    non_owning_ptr<PyTupleObject> ptr) noexcept {
+    unmanaged_ptr<PyTupleObject> ptr) noexcept {
     if (!ptr) {
         return {};
     }
@@ -161,7 +137,7 @@ LEV_HIDDEN std::span<PyObject* const> to_span(
 }
 
 LEV_HIDDEN std::strign_view to_string_view(
-    non_owning_ptr<PyUnicodeObject> ptr) noexcept {
+    unmanaged_ptr<PyUnicodeObject> ptr) noexcept {
     if (!ptr) {
         return {};
     }
@@ -170,44 +146,5 @@ LEV_HIDDEN std::strign_view to_string_view(
     auto str = PyUnicode_AsUTF8AndSize(ptr, &size);
     return std::string_view{str, static_cast<size_t>(size)};
 }
-
-namespace details {
-
-template <typename T, typename THead, typename TMid, typename... TTail>
-requires requires(void (*func)(T)) {
-    func({std::declval<THead>(), std::declval<TMid>(),
-        std::declval<TTail>()...});
-}
-LEV_HIDE_INSTANTIATION auto explicit_test(int) noexcept -> std::false_type;
-
-template <typename T, typename THead>
-requires (!is_convertible_v<THead, T> && std::is_constructible<T, THead>)
-LEV_HIDE_INSTANTIATION auto explicit_test(int) noexcept -> std::true_type;
-
-template <typename T>
-requires requires(void (*func)(T)) { func({}); }
-LEV_HIDE_INSTANTIATION auto explicit_test(int) noexcept
-    -> std::is_default_constructible<T>;
-
-template <typename T, typename... TArgs>
-LEV_HIDE_INSTANTIATION auto explicit_test(...) noexcept
-    -> std::is_constructible<T, TArgs...>;
-
-template <typename TTarget, typename... TArgs>
-using is_explicit = decltype(explicit_test<TTarget, TArgs...>(0));
-} // namespace details
-
-template <typename TTarget, typename... TArgs>
-LEV_HIDE_INSTANTIATION inline constexpr is_explicit_constructible_v =
-    decltype(details::explicit_test<TTarget, TArgs...>(0))::value;
-
-template <typename TTarget, typename... TArgs>
-struct LEV_API is_explicit_constructible :
-    details::is_explicit<TTarget, TArgs...> {};
-
-template <typename TTarget, typename... TArgs>
-struct LEV_API is_nothrow_explicit_constructible :
-    conjunction<is_explicit_constructible<TTarget, TArgs...>,
-        is_nothrow_constructible<TTarget, TArgs...>> {};
 
 } // namespace lev

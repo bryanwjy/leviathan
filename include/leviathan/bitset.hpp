@@ -7,9 +7,7 @@
 #include <climits>
 
 namespace lev {
-namespace details {
-
-namespace bit {
+namespace bit::details {
 consteval size_t ceil_div(size_t val, size_t div) noexcept {
     return (val + div - 1) / div;
 }
@@ -60,21 +58,17 @@ requires (N > 8 * CHAR_BIT)
 struct underlying<N> {
     using type = unsigned long long[ceil_div(N, CHAR_BIT)];
 };
+} // namespace bit::details
 
-constexpr size_t npos = static_cast<size_t>(-1);
-
-} // namespace bit
-
-} // namespace details
 template <size_t N>
-class alignas(details::bit::alignment(N)) bitset {
-    using underlying_type = underlying_t<N>;
+class alignas(bit::details::alignment(N)) bitset {
+    using underlying_type = bit::details::underlying_t<N>;
 
-    static constexpr size_t element_width = std::is_array_v<underlying_type>
-        ? sizeof(unsigned long long) * CHAR_BIT
-        : sizeof(underlying_type) * CHAR_BIT;
+    LEV_HIDE_INSTANTIATION static constexpr size_t element_width =
+        std::is_array_v<underlying_type> ? sizeof(unsigned long long) * CHAR_BIT
+                                         : sizeof(underlying_type) * CHAR_BIT;
 
-    static constexpr auto one_at(size_t idx) noexcept {
+    LEV_HIDE_INSTANTIATION static constexpr auto one_at(size_t idx) noexcept {
         if constexpr (!std::is_array_v<underlying_type>) {
             return static_cast<underlying_type>(1) << idx;
         } else {
@@ -83,33 +77,35 @@ class alignas(details::bit::alignment(N)) bitset {
     }
 
 public:
-    constexpr bitset() noexcept : storage_{} {}
+    constexpr size_t npos = static_cast<size_t>(-1);
+
+    LEV_HIDE_INSTANTIATION constexpr bitset() noexcept : storage_{} {}
 
     template <std::unsigned_integral... Args>
     requires std::is_array_v<underlying_type> && requires(Args... args) {
         { underlying_type{args...} } noexcept;
     }
-    constexpr explicit bitset(Args... args) noexcept : storage_{args...} {}
+    LEV_HIDE_INSTANTIATION constexpr explicit bitset(Args... args) noexcept
+        : storage_{args...} {}
 
     template <std::unsigned_integral T>
     requires (!std::is_array_v<underlying_type> &&
         std::constructible_from<underlying_type, T>)
-    constexpr explicit bitset(T val) noexcept : storage_{val} {}
+    LEV_HIDE_INSTANTIATION constexpr explicit bitset(T val) noexcept
+        : storage_{val} {}
 
-    constexpr underlying_type value() const noexcept
+    LEV_HIDE_INSTANTIATION constexpr underlying_type value() const noexcept
     requires (!std::is_array_v<underlying_type>)
     {
         return storage_;
     }
 
-    constexpr void copy(
-        std::span<std::byte, sizeof(underlying_type)> bytes) noexcept
-    requires (std::is_array_v<underlying_type>)
-    {
+    LEV_HIDE_INSTANTIATION constexpr void copy(
+        std::span<std::byte, sizeof(underlying_type)> bytes) noexcept {
         memcpy(bytes.data(), &storage_, sizeof(underlying_type));
     }
 
-    constexpr void set(size_t idx) noexcept {
+    LEV_HIDE_INSTANTIATION constexpr void set(size_t idx) noexcept {
         LEV_ASSERT(idx < N);
         if constexpr (!std::is_array_v<underlying_type>) {
             storage_ |= one_at(idx);
@@ -119,7 +115,7 @@ public:
         }
     }
 
-    constexpr void clear(size_t idx) noexcept {
+    LEV_HIDE_INSTANTIATION constexpr void clear(size_t idx) noexcept {
         LEV_ASSERT(idx < N);
         if constexpr (!std::is_array_v<underlying_type>) {
             storage_ &= ~one_at(idx);
@@ -129,7 +125,7 @@ public:
         }
     }
 
-    constexpr bool test(size_t idx) noexcept {
+    LEV_HIDE_INSTANTIATION constexpr bool test(size_t idx) noexcept {
         LEV_ASSERT(idx < N);
         if constexpr (!std::is_array_v<underlying_type>) {
             return storage_ & one_at(idx);
@@ -139,19 +135,19 @@ public:
         }
     }
 
-    constexpr size_t size() const noexcept { return N; }
+    LEV_HIDE_INSTANTIATION constexpr size_t size() const noexcept { return N; }
 
-    constexpr size_t size_bytes() const noexcept {
+    LEV_HIDE_INSTANTIATION constexpr size_t size_bytes() const noexcept {
         return sizeof(underlying_type);
     }
 
     template <size_t Offset, size_t Width = npos>
     requires (N > Offset)
-    constexpr auto subset() const noexcept {
-        using return_type = bitset<details::bit::min(Width, N - Offset)>;
+    LEV_HIDE_INSTANTIATION constexpr auto subset() const noexcept {
+        using return_type = bitset<bit::details::min(Width, N - Offset)>;
         if constexpr (!std::is_array_v<underlying_type>) {
             using return_underlying =
-                underlying_t<details::bit::min(Width, N - Offset)>;
+                underlying_t<bit::details::min(Width, N - Offset)>;
             return return_type{static_cast<return_underlying>(
                 (storage_ >> Offset) & (one_at(width) - 1))};
         } else {

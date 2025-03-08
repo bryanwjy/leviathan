@@ -142,7 +142,7 @@ class pointer_comparable {
 } // namespace details
 
 template <typename Obj>
-class LEV_API non_owning_ptr<Obj>;
+class LEV_API unmanaged_ptr<Obj>;
 
 template <pyobj_type Obj>
 class LEV_API python_ptr<Obj> : pointer_comparable<python_ptr<Obj>> {
@@ -162,13 +162,13 @@ public:
         : ptr_{Py_NewRef(as_pyobject(ptr))} {}
 
     LEV_HIDE_INSTANTIATION constexpr explicit python_ptr(
-        non_owning_ptr<Obj> ptr) noexcept
+        unmanaged_ptr<Obj> ptr) noexcept
         : python_ptr{retain_object, ptr} {}
     LEV_HIDE_INSTANTIATION constexpr python_ptr(
-        retain_t, non_owning_ptr<Obj> ptr) noexcept
+        retain_t, unmanaged_ptr<Obj> ptr) noexcept
         : ptr_{ptr} {}
     LEV_HIDE_INSTANTIATION constexpr python_ptr(
-        adopt_t, non_owning_ptr<Obj> ptr) noexcept
+        adopt_t, unmanaged_ptr<Obj> ptr) noexcept
         : ptr_{Py_NewRef(as_pyobject(ptr))} {}
 
     LEV_HIDE_INSTANTIATION constexpr python_ptr(
@@ -261,11 +261,11 @@ public:
         return *ptr_;
     }
 
-    LEV_HIDE_INSTANTIATION constexpr non_owning_ptr<Obj> get() const noexcept {
+    LEV_HIDE_INSTANTIATION constexpr unmanaged_ptr<Obj> get() const noexcept {
         return ptr_;
     }
 
-    LEV_HIDE_INSTANTIATION non_owning_ptr<Obj> release() noexcept {
+    LEV_HIDE_INSTANTIATION unmanaged_ptr<Obj> release() noexcept {
         return exchange(ptr_, nullptr);
     }
 
@@ -354,53 +354,52 @@ LEF_HIDDEN python_ptr<To> exact_ptr_cast(python_ptr<From>&& other) noexcept {
 }
 
 template <typename Obj>
-class LEV_API non_owning_ptr<Obj> : pointer_comparable<non_owning_ptr<Obj>> {
+class LEV_API unmanaged_ptr<Obj> : pointer_comparable<unmanaged_ptr<Obj>> {
 
 public:
     using element_type = Obj;
 
-    LEV_HIDE_INSTANTIATION constexpr non_owning_ptr() noexcept
-        : ptr_{nullptr} {}
-    LEV_HIDE_INSTANTIATION constexpr non_owning_ptr(decltype(nullptr)) noexcept
-        : non_owning_ptr{} {}
-    LEV_HIDE_INSTANTIATION constexpr non_owning_ptr(Obj* ptr) noexcept
+    LEV_HIDE_INSTANTIATION constexpr unmanaged_ptr() noexcept : ptr_{nullptr} {}
+    LEV_HIDE_INSTANTIATION constexpr unmanaged_ptr(decltype(nullptr)) noexcept
+        : unmanaged_ptr{} {}
+    LEV_HIDE_INSTANTIATION constexpr unmanaged_ptr(Obj* ptr) noexcept
         : ptr_{ptr} {}
 
-    LEV_HIDE_INSTANTIATION constexpr non_owning_ptr(
-        non_owning_ptr const& other) noexcept = default;
-    LEV_HIDE_INSTANTIATION constexpr non_owning_ptr& operator=(
-        non_owning_ptr const& other) noexcept = default;
-    LEV_HIDE_INSTANTIATION constexpr non_owning_ptr(
-        non_owning_ptr&& other) noexcept = default;
-    LEV_HIDE_INSTANTIATION constexpr non_owning_ptr& operator=(
-        non_owning_ptr&& other) noexcept = default;
+    LEV_HIDE_INSTANTIATION constexpr unmanaged_ptr(
+        unmanaged_ptr const& other) noexcept = default;
+    LEV_HIDE_INSTANTIATION constexpr unmanaged_ptr& operator=(
+        unmanaged_ptr const& other) noexcept = default;
+    LEV_HIDE_INSTANTIATION constexpr unmanaged_ptr(
+        unmanaged_ptr&& other) noexcept = default;
+    LEV_HIDE_INSTANTIATION constexpr unmanaged_ptr& operator=(
+        unmanaged_ptr&& other) noexcept = default;
 
-    LEV_HIDE_INSTANTIATION constexpr ~non_owning_ptr() noexcept = default;
+    LEV_HIDE_INSTANTIATION constexpr ~unmanaged_ptr() noexcept = default;
 
     template <typename U>
     requires std::is_convertible_v<U*, T*>
-    LEV_HIDE_INSTANTIATION constexpr non_owning_ptr(
-        non_owning_ptr<U> const& other) noexcept
+    LEV_HIDE_INSTANTIATION constexpr unmanaged_ptr(
+        unmanaged_ptr<U> const& other) noexcept
         : ptr_{py_cast<T>(other.get())} {}
 
     template <typename U>
     requires std::is_convertible_v<U*, T*>
-    LEV_HIDE_INSTANTIATION constexpr non_owning_ptr& operator=(
-        non_owning_ptr const& other) noexcept {
+    LEV_HIDE_INSTANTIATION constexpr unmanaged_ptr& operator=(
+        unmanaged_ptr const& other) noexcept {
         ptr_ = other.get();
         return *this;
     }
 
     template <typename U>
     requires (aliasable_subobject_of<T, U> && !std::convertible_to<U*, T*>)
-    LEV_HIDE_INSTANTIATION constexpr non_owning_ptr(
-        non_owning_ptr<U> const& other) noexcept
+    LEV_HIDE_INSTANTIATION constexpr unmanaged_ptr(
+        unmanaged_ptr<U> const& other) noexcept
         : ptr_{py_cast<T>(other.ptr_)} {}
 
     template <typename U>
     requires (aliasable_subobject_of<T, U> && !std::convertible_to<U*, T*>)
-    LEV_HIDE_INSTANTIATION constexpr non_owning_ptr& operator=(
-        non_owning_ptr<U> const& other) noexcept {
+    LEV_HIDE_INSTANTIATION constexpr unmanaged_ptr& operator=(
+        unmanaged_ptr<U> const& other) noexcept {
         ptr_ = py_cast<T>(other.ptr_);
 
         return *this;
@@ -455,7 +454,7 @@ private:
 };
 
 template <pyobj_type T>
-LEF_HIDDEN python_ptr<T> adopt(non_owning_ptr<T> ptr) noexcept {
+LEF_HIDDEN python_ptr<T> adopt(unmanaged_ptr<T> ptr) noexcept {
     return python_ptr{adopt_object, ptr.get()};
 }
 
@@ -470,14 +469,14 @@ LEF_HIDDEN python_ptr<T> adopt(python_ptr<T> const& ptr) noexcept {
 }
 
 template <typename To, typename From>
-LEF_HIDDEN non_owning_ptr<To> static_ptr_cast(
-    non_owning_ptr<From> other) noexcept {
+LEF_HIDDEN unmanaged_ptr<To> static_ptr_cast(
+    unmanaged_ptr<From> other) noexcept {
     return py_cast<To>(other.get());
 }
 
 template <typename To, typename From>
-LEF_HIDDEN non_owning_ptr<To> dynamic_ptr_cast(
-    non_owning_ptr<From> other) noexcept {
+LEF_HIDDEN unmanaged_ptr<To> dynamic_ptr_cast(
+    unmanaged_ptr<From> other) noexcept {
     if (dynamic_ptr_cast<To>(other.get())) {
         return py_cast<To>(other.get());
     } else {
@@ -486,8 +485,8 @@ LEF_HIDDEN non_owning_ptr<To> dynamic_ptr_cast(
 }
 
 template <typename To, typename From>
-LEF_HIDDEN non_owning_ptr<To> exact_ptr_cast(
-    non_owning_ptr<From> other) noexcept {
+LEF_HIDDEN unmanaged_ptr<To> exact_ptr_cast(
+    unmanaged_ptr<From> other) noexcept {
     if (exact_ptr_cast<To>(other.get())) {
         return py_cast<To>(other.get());
     } else {

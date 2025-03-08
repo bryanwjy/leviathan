@@ -11,8 +11,6 @@
 namespace lev::argument {
 namespace details {
 
-namespace string = ::lev::string::literals::details;
-
 class argument_root {
 protected:
     LEV_HIDDEN constexpr ~argument_root() noexcept = default;
@@ -21,29 +19,29 @@ protected:
 template <auto str>
 class argument_base;
 
-template <pystirng_literal auto str>
+template <pystring_literal auto str>
 class argument_base<str> : public argument_root {
-    using Source = string::Storage<str>;
+    using source_type = static_storage<str>;
 
 public:
     LEV_HIDE_INSTANTIATION [[nodiscard]] explicit
     operator PyASCIIObject*() const noexcept {
-        return reinterpret_cast<PyASCIIObject*>(&Source::value);
+        return reinterpret_cast<PyASCIIObject*>(&source_type::value);
     }
 
     LEV_HIDE_INSTANTIATION [[nodiscard]] explicit
     operator PyObject*() const noexcept {
-        return reinterpret_cast<PyObject*>(&Source::value);
+        return reinterpret_cast<PyObject*>(&source_type::value);
     }
 
     LEV_HIDE_INSTANTIATION [[nodiscard]] constexpr explicit
     operator std::string_view() const noexcept {
-        return Source::value;
+        return source_type::value;
     }
 
     LEV_HIDE_INSTANTIATION [[nodiscard]] constexpr explicit
     operator char const*() const noexcept {
-        return static_cast<char const*>(Source::value.data);
+        return static_cast<char const*>(source_type::value.data);
     }
 
     consteval argument_base() noexcept = default;
@@ -52,31 +50,19 @@ protected:
     LEV_HIDE_INSTANTIATION constexpr ~argument_base() noexcept = default;
 };
 
-template <typename T, typename Base>
-class typed_argument : public Base {
-public:
-    using Base::Base;
-};
-
 template <auto PyStr>
 class argument : public argument_base<PyStr> {
 public:
     using argument_base<PyStr>::argument_base;
 };
 
-struct optional_base {
-protected:
-    LEV_HIDE_INSTANTIATION constexpr ~optional_base() noexcept = default;
-};
-
 template <auto PyStr>
-class optional_argument : public argument_base<PyStr>, public optional_base {
+class optional_argument : public argument_base<PyStr> {
 public:
     using argument_base<PyStr>::argument_base;
 };
 
-void raise_argument_count_error(
-    size_t needed, size_t opt, size_t received) noexcept {
+void raise_count_error(size_t needed, size_t opt, size_t received) noexcept {
     PyErr_Format(PyExc_ValueError,
         "Invocation failed, Reason=[Unexpected argument count], "
         "Expected=[%zu + %zu optional], Received=[%zu]",
@@ -97,10 +83,10 @@ LEV_HIDE_INSTANTIATION [[nodiscard]] std::array<T, sizeof...(Ns)> as_array(
 
 } // namespace details
 
-struct var_args {
+struct basic_call {
 public:
-    LEV_HIDE_INSTANTIATION var_args(std::span<PyObject* const> args,
-        non_owning_ptr<PyDictObject> kwargs = nullptr) noexcept
+    LEV_HIDE_INSTANTIATION basic_call(std::span<PyObject* const> args,
+        unmanaged_ptr<PyDictObject> kwargs = nullptr) noexcept
         : args{args}
         , kwargs{kwargs} {}
 
@@ -153,16 +139,16 @@ private:
             return true;
         }
 
-        details::raise_argument_count_error(Mandatory, Optional, received);
+        details::raise_count_error(Mandatory, Optional, received);
         return false;
     }
     std::span<PyObject* const> args;
-    non_owning_ptr<PyDictObject> kwargs;
+    unmanaged_ptr<PyDictObject> kwargs;
 };
 
-class fast_args {
+class vector_call {
 public:
-    LEV_HIDE_INSTANTIATION fast_args(std::span<PyObject* const> args,
+    LEV_HIDE_INSTANTIATION vector_call(std::span<PyObject* const> args,
         std::span<PyObject* const> kwnames = {}) noexcept
         : args{args}
         , kwargs{args.data() + args.size(), kwnames.size()}
@@ -267,7 +253,7 @@ private:
             return true;
         }
 
-        details::raise_argument_count_error(Mandatory, Optional, received);
+        details::raise_count_error(Mandatory, Optional, received);
         return false;
     }
 
@@ -279,15 +265,15 @@ private:
 template <size_t... Ns, size_t... Os>
 LEV_HIDE_INSTANTIATION
     [[nodiscard]] std::array<PyObject*, sizeof...(Ns) + sizeof...(Os)>
-    sort(var_args args, argument<Ns>... names,
-        optional_argument<Os>... onames) noexcept {
+    sort(basic_call args, details::argument<Ns>... names,
+        details::optional_argument<Os>... onames) noexcept {
     return args.sort(std::span{as_array<PyASCIIObject*>(names...)},
         std::span{as_array<PyASCIIObject*>(onames...)});
 }
 
 template <size_t... Ns>
 LEV_HIDE_INSTANTIATION [[nodiscard]] std::array<PyObject*, sizeof...(Ns)> sort(
-    var_args args, argument<Ns>... names) noexcept {
+    basic_call args, details::argument<Ns>... names) noexcept {
     return args.sort(std::span{as_array<PyASCIIObject*>(names...)},
         std::span<PyASCIIObject*, 0>{});
 }
@@ -295,7 +281,7 @@ LEV_HIDE_INSTANTIATION [[nodiscard]] std::array<PyObject*, sizeof...(Ns)> sort(
 template <size_t... Ns, size_t... Os>
 LEV_HIDE_INSTANTIATION
     [[nodiscard]] std::array<PyObject*, sizeof...(Ns) + sizeof...(Os)>
-    sort(fast_args args, argument<Ns>... names,
+    sort(vector_call args, details::argument<Ns>... names,
         optional_argument<Os>... onames) noexcept {
     return args.sort(std::span{as_array<char const*>(names...)},
         std::span{as_array<char const*>(onames...)});
@@ -303,45 +289,36 @@ LEV_HIDE_INSTANTIATION
 
 template <size_t... Ns>
 LEV_HIDE_INSTANTIATION [[nodiscard]] std::array<PyObject*, sizeof...(Ns)> sort(
-    fast_args args, argument<Ns>... names) noexcept {
+    vector_call args, details::argument<Ns>... names) noexcept {
     return args.sort(std::span{as_array<char const*>(names...)},
         std::span<char const*, 0>{});
 }
-
-namespace literals {
-template <details::string::pyliteral S>
-[[nodiscard]] consteval auto operator""_arg() noexcept {
-    return details::argument<S>{};
-}
-
-template <details::string::pyliteral S>
-[[nodiscard]] consteval auto operator""_opt() noexcept {
-    return details::optional_argument<S>{};
-}
-} // namespace literals
-
-template <typename>
-LEV_HIDDEN inline constexpr bool is_literal_v = false;
-
-template <typename T>
-LEV_HIDDEN inline constexpr bool is_literal_v<T const> = is_literal_v<T>;
-template <typename T>
-LEV_HIDDEN inline constexpr bool is_literal_v<T volatile> = is_literal_v<T>;
-template <typename T>
-LEV_HIDDEN inline constexpr bool is_literal_v<T const volatile> =
-    is_literal_v<T>;
-
-template <details::string::pyliteral S>
-LEV_HIDDEN inline constexpr bool is_literal_v<details::argument<S>> = true;
-template <details::string::pyliteral S>
-LEV_HIDDEN inline constexpr bool is_literal_v<details::optional_argument<S>> =
-    true;
-
 } // namespace lev::argument
 
 namespace lev {
+template <typename>
+LEV_HIDDEN inline constexpr bool is_argument_literal_v = false;
+
 template <typename T>
-concept argument_literal = argument::is_literal_v<T>;
+LEV_HIDDEN inline constexpr bool is_argument_literal_v<T const> =
+    is_argument_literal_v<T>;
+template <typename T>
+LEV_HIDDEN inline constexpr bool is_argument_literal_v<T volatile> =
+    is_argument_literal_v<T>;
+template <typename T>
+LEV_HIDDEN inline constexpr bool is_argument_literal_v<T const volatile> =
+    is_argument_literal_v<T>;
+
+template <string::details::pyliteral S>
+LEV_HIDDEN inline constexpr bool is_argument_literal_v<details::argument<S>> =
+    true;
+
+template <string::details::pyliteral S>
+LEV_HIDDEN inline constexpr bool
+    is_argument_literal_v<details::optional_argument<S>> = true;
+
+template <typename T>
+concept argument_literal = is_argument_literal_v<T>;
 
 template <auto... Name, typename... Ts>
 struct typed;
@@ -367,7 +344,101 @@ using untyped = typed<PyObject>;
 template <argument_literal auto Name>
 using untyped_name = typed<Name, PyObject>;
 
-namespace literals {
-using namespace lev::argument::literals;
+inline namespace literals {
+inline namespace argument_literals {
+template <string::details::pyliteral S>
+[[nodiscard]] consteval auto operator""_arg() noexcept {
+    return argument::details::argument<S>{};
 }
+
+template <string::details::pyliteral S>
+[[nodiscard]] consteval auto operator""_opt() noexcept {
+    return argument::details::optional_argument<S>{};
+}
+} // namespace argument_literals
+} // namespace literals
+
+namespace argument {
+
+template <typename>
+LEV_HIDDEN inline constexpr bool is_declaration_v = false;
+
+template <argument_literal auto Name, typename T, typename... Ts>
+LEV_HIDDEN inline constexpr bool is_declaration_v<typed<Name, T, Ts...>> = true;
+
+template <typename T, typename... Ts>
+LEV_HIDDEN inline constexpr bool is_declaration_v<typed<T, Ts...>> = true;
+
+template <typename>
+LEV_HIDDEN inline constexpr bool is_named_declaration_v = false;
+
+template <argument_literal auto Name, typename... Ts>
+LEV_HIDDEN inline constexpr bool is_named_declaration_v<typed<Name, Ts...>> =
+    true;
+
+template <typename>
+LEV_HIDDEN inline constexpr bool is_optional_declaration_v = false;
+
+template <details::string::details::pyliteral S, typename... Ts>
+LEV_HIDDEN inline constexpr bool
+    is_optional_declaration_v<typed<optional_argument<S>, Ts...>> = true;
+
+template <typename>
+LEV_HIDDEN inline constexpr bool is_variant_declaration_v = false;
+
+template <auto Name, typename T0, typename T1, typename... Ts>
+LEV_HIDDEN inline constexpr bool
+    is_variant_declaration_v<typed<Name, T0, T1, Ts...>> = true;
+
+template <typename T0, typename T1, typename... Ts>
+LEV_HIDDEN inline constexpr bool
+    is_variant_declaration_v<typed<T0, T1, Ts...>> = true;
+
+template <typename T>
+concept declaration = is_declaration_v<T>;
+
+template <typename T>
+concept named_declaration = declaration<T> && is_named_declaration_v<T>;
+
+template <typename T>
+concept optional_declaration = declaration<T> && is_optional_declaration_v<T>;
+
+template <typename T>
+concept variant_declaration = declaration<T> && is_variant_declaration_v<T>;
+
+template <typename>
+struct name_of {};
+
+template <auto Name, typename... Ts>
+struct name_of<typed<Name, Ts...>> {
+    static constexpr auto value = Name;
+};
+
+template <declaration T>
+LEV_HIDDEN inline constexpr auto name_of_v = name_of<T>::value;
+
+template <typename>
+struct type_of {};
+
+template <typename T>
+using type_of_t = typename type_of<T>::type;
+
+template <typename T>
+struct type_of<typed<T>> {
+    using type = T;
+};
+
+template <auto Name, typename T>
+struct type_of<typed<Name, T>> : type_of<typed<T>> {};
+
+template <typename...>
+class tuple;
+template <typename...>
+class variant;
+
+template <typename T0, typename... Ts>
+struct type_of<typed<T0, Ts...>> {
+    using type = variant<T0, Ts...>;
+};
+} // namespace argument
 } // namespace lev

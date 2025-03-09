@@ -3,8 +3,10 @@
 
 #include "leviathan/_common.hpp"
 #include "leviathan/type_traits.hpp"
+#include "leviathan/utility.hpp"
 
 namespace lev::details {
+
 template <typename T0, typename T1>
 LEV_HIDDEN inline constexpr bool fits_in_tail_padding_v = []() {
     struct test_struct {
@@ -32,7 +34,7 @@ struct conditionally_overlapable {
 
     template <typename F, typename... Args>
     LEV_HIDE_INSTANTIATION inline constexpr explicit conditionally_overlapable(
-        converting_t, F&& f,
+        generate_t, F&& f,
         Args&&... args) noexcept(std::is_nothrow_invocable_v<F, Args...> &&
         std::is_nothrow_constructible_v<T, std::invoke_result_t<F, Args...>>)
         : data{std::invoke(std::forward<F>(f), std::forward<Args>(args)...)} {}
@@ -58,7 +60,7 @@ struct conditionally_overlapable<false, T> {
 
     template <typename F, typename... Args>
     LEV_HIDE_INSTANTIATION inline constexpr explicit conditionally_overlapable(
-        converting_t, F&& f,
+        generate_t, F&& f,
         Args&&... args) noexcept(std::is_nothrow_invocable_v<F, Args...> &&
         std::is_nothrow_constructible_v<T, std::invoke_result_t<F, Args...>>)
         : data{std::invoke(std::forward<F>(f), std::forward<Args>(args)...)} {}

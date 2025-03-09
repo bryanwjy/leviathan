@@ -99,6 +99,7 @@ public:
             return {};
         }
 
+        std::array<PyObject*, kTotal> result{};
         auto const pos_count = std::min(kTotal, args.size());
         std::ranges::copy(args | std::ranges::take(pos_count), result.begin());
         if (kwargs == nullptr) {
@@ -125,6 +126,19 @@ public:
                 return PyDict_GetItem(kwargs, as_pyobject(ascii));
             });
 
+        return result;
+    }
+
+    template <size_t N, size_t O>
+    LEV_HIDE_INSTANTIATION std::array<PyObject*, N + O> sort() const noexcept {
+        static constexpr size_t kTotal = N + O;
+        if (!verify_count<N, O>()) {
+            return {};
+        }
+
+        std::array<PyObject*, kTotal> result{};
+        auto const pos_count = std::min(kTotal, args.size());
+        std::ranges::copy(args | std::views::take(pos_count), result.begin());
         return result;
     }
 
@@ -184,6 +198,19 @@ public:
             sort_optionals(span, optionals.subspan(opt_offset));
         }
 
+        return result;
+    }
+
+    template <size_t N, size_t O>
+    LEV_HIDE_INSTANTIATION std::array<PyObject*, N + O> sort() const noexcept {
+        static constexpr size_t kTotal = N + O;
+        if (!verify_count<N, O>()) {
+            return {};
+        }
+
+        std::array<PyObject*, kTotal> result{};
+        auto const pos_count = std::min(kTotal, args.size());
+        std::ranges::copy(args | std::views::take(pos_count), result.begin());
         return result;
     }
 
@@ -425,20 +452,18 @@ using type_of_t = typename type_of<T>::type;
 
 template <typename T>
 struct type_of<typed<T>> {
-    using type = T;
+    using type = expected<T, conversion_error>;
 };
 
 template <auto Name, typename T>
 struct type_of<typed<Name, T>> : type_of<typed<T>> {};
 
-template <typename...>
-class tuple;
-template <typename...>
+template <typename T>
 class variant;
 
-template <typename T0, typename... Ts>
-struct type_of<typed<T0, Ts...>> {
-    using type = variant<T0, Ts...>;
+template <variant_declaration T>
+struct type_of<T> {
+    using type = variant<T>;
 };
 } // namespace argument
 } // namespace lev

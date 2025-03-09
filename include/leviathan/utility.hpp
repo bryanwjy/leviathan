@@ -9,13 +9,33 @@
 #include <utility>
 
 namespace lev {
+struct LEV_API generator_t {
+    LEV_HIDDEN explicit inline constexpr generator_t() noexcept = default;
+};
+inline constexpr generator_t generator{};
+
+template <typename T>
+struct LEV_API generator_type_t {
+    LEV_HIDDEN explicit inline constexpr generator_type_t() noexcept = default;
+};
+template <typename T>
+inline constexpr generator_type_t<T> generator_type{};
+
+template <size_t I>
+struct LEV_API generator_index_t {
+    LEV_HIDDEN explicit inline constexpr generator_index_t() noexcept = default;
+};
+
+template <size_t I>
+inline constexpr generator_index_t<I> generator_index{};
+
 template <std::move_constructible T, typename U = T>
 requires std::assignable_from<T&, U>
 LEV_HIDDEN [[nodiscard]] inline constexpr T exchange(
     T& obj, U&& new_value) noexcept(std::is_nothrow_move_constructible<T> &&
     std::is_nothrow_assignable_v<T&, U>) {
     T previous(std::move(obj));
-    obj = __UTL forward<U>(new_value);
+    obj = std::forward<U>(new_value);
     return previous;
 }
 

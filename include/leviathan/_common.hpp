@@ -1,7 +1,8 @@
 // Copyright 2025, Bryan Wong
 #pragma once
 
-#if LEVIATHAN_MODULE
+#ifdef LEVIATHAN_LIBRARY
+
 #  define LEV_API __attribute__((__visibility__("default")))
 
 #  define LEV_HIDDEN __attribute__((__visibility__("hidden")))
@@ -15,7 +16,13 @@
         __attribute__((__visibility__("hidden"), __always_inline__))
 #  endif
 
-#endif
+#else
+
+#  define LEV_HIDDEN __attribute__((__visibility__("hidden")))
+#  define LEV_API LEV_HIDDEN
+#  define LEV_HIDE_INSTANTIATION LEV_HIDDEN
+
+#endif // LEVIATHAN_LIBRARY
 
 #ifndef NDEBUG
 #  include <cassert>
@@ -47,6 +54,15 @@
 #else
 #  define LEV_LIFETIMEBOUND
 #endif /* UTL_HAS_CPP_ATTRIBUTE(msvc::lifetimebound) */
+
+#ifdef __GNUC__ // GCC 4.8+, Clang, Intel and other compilers compatible with
+                // GCC (-std=c++0x or above)
+#  define LEV_UNREACHABLE() __builtin_unreachable()
+#elif defined(_MSC_VER) // MSVC
+#  define LEV_UNREACHABLE() __assume(false)
+#else // ???
+#  error "No Unreachable"
+#endif
 
 #define LEV_TRY try
 #define LEV_CATCH(...) catch (__VA_ARGS__)

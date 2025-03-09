@@ -17,6 +17,19 @@ consteval bool always_true() noexcept {
     return true;
 }
 
+using size_t = decltype(sizeof(0));
+
+namespace details {
+template <typename T, size_t = sizeof(T)>
+std::true_type is_complete_impl(int) noexcept;
+
+template <typename T>
+std::false_type is_complete_impl(short) noexcept;
+} // namespace details
+
+template <typename T, typename R = decltype(details::is_complete_impl<T>(0))>
+inline constexpr bool is_complete_v = R::value;
+
 template <typename E>
 concept enum_type = is_enum_v<E>;
 
@@ -27,10 +40,10 @@ using enum_constant =
     std::integral_constant<std::remove_const_t<decltype(E)>, E>;
 
 template <typename...>
-struct typelist {};
+struct LEV_API typelist {};
 
 template <typename From, typename To>
-struct copy_cv {
+struct LEV_API copy_cv {
     using type = To;
 };
 
@@ -38,32 +51,32 @@ template <typename From, typename To>
 using copy_cv_t = typename copy_cv<From, To>::type;
 
 template <typename From, typename To>
-struct copy_cv<From const, To> {
+struct LEV_API copy_cv<From const, To> {
     using type = To const;
 };
 
 template <typename From, typename To>
-struct copy_cv<From const volatile, To> {
+struct LEV_API copy_cv<From const volatile, To> {
     using type = To const volatile;
 };
 
 template <typename From, typename To>
-struct copy_cv<From volatile, To> {
+struct LEV_API copy_cv<From volatile, To> {
     using type = To volatile;
 };
 
 template <typename From, typename To>
-struct copy_cvref : copy_cv<From, To> {};
+struct LEV_API copy_cvref : copy_cv<From, To> {};
 
 template <typename From, typename To>
 using copy_cvref_t = typename copy_cvref<From, To>::type;
 
 template <typename From, typename To>
-struct copy_cvref<From&, To> :
+struct LEV_API copy_cvref<From&, To> :
     std::add_lvalue_reference<copy_cv_t<From, To>> {};
 
 template <typename From, typename To>
-struct copy_cvref<From&&, To> :
+struct LEV_API copy_cvref<From&&, To> :
     std::add_rvalue_reference<copy_cv_t<From, To>> {};
 
 namespace details {
@@ -93,36 +106,67 @@ using is_explicit = decltype(explicit_test<TTarget, TArgs...>(0));
 } // namespace details
 
 template <typename TTarget, typename... TArgs>
-LEV_HIDE_INSTANTIATION inline constexpr is_explicit_constructible_v =
+inline constexpr is_explicit_constructible_v =
     decltype(details::explicit_test<TTarget, TArgs...>(0))::value;
 
 template <typename TTarget, typename... TArgs>
-LEV_HIDE_INSTANTIATION inline constexpr is_nothrow_explicit_constructible_v =
+inline constexpr is_nothrow_explicit_constructible_v =
     is_explicit_constructible_v<TTarget, TArgs...> &&
     std::is_nothrow_constructible_v<TTarget, TArgs...>;
 
 template <typename TTarget, typename... TArgs>
-struct is_explicit_constructible : details::is_explicit<TTarget, TArgs...> {};
+struct LEV_API is_explicit_constructible :
+    details::is_explicit<TTarget, TArgs...> {};
 
 template <typename TTarget, typename... TArgs>
-struct is_nothrow_explicit_constructible :
+struct LEV_API is_nothrow_explicit_constructible :
     std::conjunction<is_explicit_constructible<TTarget, TArgs...>,
         std::is_nothrow_constructible<TTarget, TArgs...>> {};
 
 template <size_t I, typename List>
-struct template_element {};
+struct LEV_API template_element {};
 
 template <size_t I, typename List>
 using template_element_t = typename template_element<I, List>::type;
 
 template <template <typename...> class List, typename Head, typename... Tail>
-struct template_element<0, List<Head, Tail...>> {
+struct LEV_API template_element<0, List<Head, Tail...>> {
     using type = Head;
 };
 
 template <size_t I, template <typename...> class List, typename Head,
     typename... Tail>
-struct template_element<I, List<Head, Tail...>> :
+struct LEV_API template_element<I, List<Head, Tail...>> :
     template_element<I - 1, typelist<Tail...>> {};
+
+template <typename List>
+inline constexpr size_t template_size_v = 0;
+
+template <template <typename...> class List, typename... Ts>
+inline constexpr size_t template_size_v<List<Ts...>> = sizeof...(Ts);
+
+template <typename T, typename List>
+inline constexpr size_t template_count_v = 0;
+
+template <typename T, template <typename...> class List, typename T0,
+    typename... Ts>
+inline constexpr size_t template_count_v<T, List<T0, Ts...>> =
+    template_count_v<T, List<Ts...>>;
+
+template <typename T, template <typename...> class List, typename... Ts>
+inline constexpr size_t template_count_v<T, List<T, Ts...>> =
+    1 + template_count_v<T, List<Ts...>>;
+
+template <typename T, typename List>
+inline constexpr size_t template_index_v = static_cast<size_t>(-1);
+
+template <template <typename...> class List, typename Head, typename... Tail>
+inline constexpr size_t template_index_v<Head, List<Head, Tail...>> = 0;
+
+template <typename T, template <typename...> class List, typename Head,
+    typename... Tail>
+inline constexpr size_t template_index_v<T, List<Head, Tail...>> =
+    [](size_t result) -> size_t { return result | -(result < 1); }(
+                          1 + template_index_v<T, List<Tail...>>);
 
 } // namespace lev

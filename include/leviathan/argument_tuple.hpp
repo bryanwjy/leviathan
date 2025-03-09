@@ -39,14 +39,11 @@ struct access_type;
 template <typename T>
 using access_type_t = typename access_type<T>::type;
 
-template <declaration T>
-requires (is_optional_v<T> || pyobj_type<T>)
-struct access_type : std::add_pointer<T> {};
+template <optional_declaration T>
+struct access_type : std::add_pointer<type_of_t<T>> {};
 
 template <declaration T>
-struct access_type<T> {
-    using type = T;
-};
+struct access_type : stored_type<T> {};
 
 template <typename...>
 class tuple;
@@ -63,64 +60,61 @@ struct empty_t {
     }
 };
 
-struct generating_t {
-    LEV_HIDDEN explicit inline constexpr generating_t() noexcept = default;
-};
-LEV_HIDDEN inline constexpr generating_t generating{};
-
 template <typename T>
-union data_union {
+union optional_union {
     static_assert(!std::is_same_v<empty_t>, "Invalid type");
-    LEV_HIDE_INSTANTIATION inline constexpr data_union(
-        data_union const&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr data_union(
-        data_union const&) noexcept(std::is_nothrow_copy_constructible_v<T>)
+    LEV_HIDE_INSTANTIATION inline constexpr optional_union(
+        optional_union const&) = delete;
+    LEV_HIDE_INSTANTIATION inline constexpr optional_union(
+        optional_union const&) noexcept(std::is_nothrow_copy_constructible_v<T>)
     requires (std::is_copy_constructible_v<T> &&
                  std::is_trivially_copy_constructible_v<T>)
     = default;
-    LEV_HIDE_INSTANTIATION inline constexpr data_union(data_union&&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr data_union(data_union&&) noexcept(
-        std::is_nothrow_move_constructible_v<T>)
+    LEV_HIDE_INSTANTIATION inline constexpr optional_union(
+        optional_union&&) = delete;
+    LEV_HIDE_INSTANTIATION inline constexpr optional_union(
+        optional_union&&) noexcept(std::is_nothrow_move_constructible_v<T>)
     requires (std::is_move_constructible_v<T> &&
                  std::is_trivially_move_constructible_v<T>)
     = default;
-    LEV_HIDE_INSTANTIATION inline constexpr data_union& operator=(
-        data_union const&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr data_union& operator=(
-        data_union const&) noexcept(std::is_nothrow_copy_assignable_v<T>)
+    LEV_HIDE_INSTANTIATION inline constexpr optional_union& operator=(
+        optional_union const&) = delete;
+    LEV_HIDE_INSTANTIATION inline constexpr optional_union& operator=(
+        optional_union const&) noexcept(std::is_nothrow_copy_assignable_v<T>)
     requires (std::is_copy_assignable_v<T> &&
                  std::is_trivially_copy_assignable_v<T>)
     = default;
-    LEV_HIDE_INSTANTIATION inline constexpr data_union& operator=(
-        data_union&&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr data_union& operator=(
-        data_union&&) noexcept(std::is_nothrow_move_assignable_v<T>)
+    LEV_HIDE_INSTANTIATION inline constexpr optional_union& operator=(
+        optional_union&&) = delete;
+    LEV_HIDE_INSTANTIATION inline constexpr optional_union& operator=(
+        optional_union&&) noexcept(std::is_nothrow_move_assignable_v<T>)
     requires (std::is_move_assignable_v<T> &&
                  std::is_trivially_move_assignable_v<T>)
     = default;
 
     template <typename... Args>
-    LEV_HIDE_INSTANTIATION inline constexpr explicit data_union(std::in_place_t,
+    LEV_HIDE_INSTANTIATION inline constexpr explicit optional_union(
+        std::in_place_t,
         Args&&... args) noexcept(std::is_nothrow_constructible_v<T, Args...>)
         : value{std::forward<Args>(args)...} {}
 
-    LEV_HIDE_INSTANTIATION inline constexpr explicit data_union(
+    LEV_HIDE_INSTANTIATION inline constexpr explicit optional_union(
         empty_t) noexcept
         : empty{} {}
 
     template <typename F, typename... Args>
-    LEV_HIDE_INSTANTIATION inline constexpr explicit data_union(generating_t,
+    LEV_HIDE_INSTANTIATION inline constexpr explicit optional_union(generator_t,
         F&& func,
         Args&&... args) noexcept(std::is_nothrow_constructible_v<T, Args...>)
         : value{std::invoke(
               std::forward<F>(func), std::forward<Args>(args)...)} {}
 
-    LEV_HIDE_INSTANTIATION inline constexpr data_union() noexcept = default;
+    LEV_HIDE_INSTANTIATION inline constexpr optional_union() noexcept = default;
 
-    LEV_HIDE_INSTANTIATION inline constexpr ~data_union() noexcept
+    LEV_HIDE_INSTANTIATION inline constexpr ~optional_union() noexcept
     requires (std::is_trivially_destructible_v<T>)
     = default;
-    LEV_HIDE_INSTANTIATION inline constexpr ~data_union() noexcept {}
+    LEV_HIDE_INSTANTIATION inline constexpr ~optional_union() noexcept {}
 
     [[LEV_MSVC no_unique_address]] empty_t empty;
     [[LEV_MSVC no_unique_address]] T value;
@@ -136,7 +130,7 @@ inline constexpr T make_from_union(bool has_value, U&& arg) noexcept(
 template <declaration... Ts>
 class storage_base {
     using storage_type =
-        std::tuple<data_union<stored_type_t<Ts>>..., bitset<sizeof...(Ts)>>;
+        std::tuple<optional_union<stored_type_t<Ts>>..., bitset<sizeof...(Ts)>>;
 
 public:
     LEV_HIDE_INSTANTIATION inline constexpr ~storage_base() noexcept = default;
@@ -154,7 +148,7 @@ public:
     requires ((... && std::is_copy_constructible_v<Ts>) &&
         !(... && std::is_trivially_copy_constructible_v<Ts>))
         : storage_base(
-              generating, [&]<size_t... Is>(std::index_sequence<Is...>) {
+              generator, [&]<size_t... Is>(std::index_sequence<Is...>) {
                   return std::tuple{
                       make_from_union(other.template has_value<Is>(),
                           other.template value_ref<Is>())...};
@@ -174,7 +168,7 @@ public:
     requires ((... && std::is_move_constructible_v<Ts>) &&
         !(... && std::is_trivially_move_constructible_v<Ts>))
         : storage_base(
-              generating, [&]<size_t... Is>(std::index_sequence<Is...>) {
+              generator, [&]<size_t... Is>(std::index_sequence<Is...>) {
                   return std::tuple{
                       make_from_union(other.template has_value<Is>(),
                           std::move(other.template value_ref<Is>()))...};
@@ -362,7 +356,7 @@ public:
 
         LEV_ASSERT(!this->template has_value<I>());
         LEV_TRY {
-            std::construct_at(std::addressof(value_ref<I>()), generating,
+            std::construct_at(std::addressof(value_ref<I>()), lev::generator,
                 std::forward<F>(func), std::forward<Args>(args));
             set_value<I>();
         } LEV_CATCH(...) {
@@ -403,7 +397,7 @@ private:
     template <typename F, typename... Args>
     requires (std::is_invocable_v<F, Args...> &&
         std::is_constructible_v<storage_type, std::invoke_result_t<F, Args...>>)
-    LEV_HIDE_INSTANTIATION inline constexpr storage_base(generating_t tag,
+    LEV_HIDE_INSTANTIATION inline constexpr storage_base(generator_t tag,
         F&& func,
         Args&&... args) noexcept(std::is_nothrow_invocable_v<F, Args...> &&
         std::is_nothrow_constructible_v<storage_type,
@@ -767,240 +761,6 @@ result_code populate(
 
     return PyErr_Occurred() ? result_code::failed : result_code::success;
 }
-
-template <pyobj_type T>
-class converter<T, T> {
-public:
-    template <size_t Idx, argument::declaration... Ts>
-    requires std::same_as<template_element_t<Idx, typelist<Ts...>>, T*>
-    static bool try_emplace(T* src, argument::tuple<Ts...>& dst) noexcept {
-        details::invoke_emplace_at<Idx, T*>(dst, src);
-        return true;
-    }
-};
-
-template <pyobj_type From, pyobj_type To>
-class converter<From, To> {
-public:
-    template <size_t Idx, argument::declaration... Ts>
-    static bool try_emplace(From* src, argument::tuple<Ts...>& dst) noexcept {
-        if (auto ptr = dynamic_ptr_cast<To>(src)) {
-            details::invoke_emplace_at<Idx, To*>(dst, ptr);
-            return true;
-        }
-
-        PyErr_Format(PyExc_TypeError,
-            "Argument conversion failed, Reason=[Unexpected argument type], "
-            "Type=[%s]",
-            src ? Py_TYPE(src)->tp_name : "nullptr");
-        return false;
-    }
-};
-
-template <>
-class converter<PyObject, std::string_view> {
-public:
-    template <size_t Idx, argument::declaration... Ts>
-    static bool try_emplace(
-        argument::tuple<Ts...>& dst, PyObject* src) noexcept {
-        if (dynamic_ptr_cast<PyUnicodeObject>(src) == nullptr) {
-            PyErr_Format(PyExc_TypeError,
-                "Argument conversion failed, Reason=[Unexpected argument "
-                "type], "
-                "Type=[%s]",
-                src ? Py_TYPE(src)->tp_name : "nullptr");
-            return false;
-        }
-
-        // TODO: How to add more types?
-
-        return converter<PyUnicodeObject, std::string_view>::try_emplace<Idx>(
-            dst, src);
-    }
-};
-
-template <>
-class converter<PyObject, char> {
-public:
-    template <size_t Idx, argument::declaration... Ts>
-    static bool try_emplace(
-        argument::tuple<Ts...>& dst, PyObject* src) noexcept {
-        if (auto ptr = dynamic_ptr_cast<PyLongObject>(src)) {
-            return converter<PyLongObject, char>::try_emplace<Idx>(dst, ptr);
-        }
-
-        if (auto ptr = dynamic_ptr_cast<PyUnicodeObject>(src)) {
-            return converter<PyUnicodeObject, char>::try_emplace<Idx>(dst, ptr);
-        }
-
-        PyErr_Format(PyExc_TypeError,
-            "Argument conversion failed, Reason=[Unexpected argument type], "
-            "Type=[%s]",
-            src ? Py_TYPE(src)->tp_name : "nullptr");
-
-        return false;
-    }
-};
-
-template <>
-class converter<PyUnicodeObject, std::string_view> {
-public:
-    template <size_t Idx, argument::declaration... Ts>
-    static bool try_emplace(
-        argument::tuple<Ts...>& dst, PyUnicodeObject* src) noexcept {
-        Py_ssize_t size = 0;
-        auto ptr = PyUnicode_AsUTF8AndSize(as_pyobject(src), &size);
-        if (!ptr) {
-            return false;
-        }
-
-        details::invoke_emplace_at<Idx, std::string_view>(dst, ptr, size);
-        return true;
-    }
-};
-
-template <>
-class converter<PyUnicodeObject, char> {
-public:
-    template <size_t Idx, argument::declaration... Ts>
-    static bool try_emplace(
-        argument::tuple<Ts...>& dst, PyUnicodeObject* src) noexcept {
-        if (auto ptr = PyUnicode_AsUTF8AndSize(as_pyobject(src))) {
-            details::invoke_emplace_at<Idx, char>(dst, *ptr, size);
-            return true;
-        }
-
-        return false;
-    }
-};
-
-template <>
-class converter<PyObject, bool> {
-public:
-    template <size_t Idx, argument::declaration... Ts>
-    static bool try_emplace(
-        argument::tuple<Ts...>& dst, PyObject* src) noexcept {
-        details::invoke_emplace_at<Idx, bool>(dst, Py_IsTrue(src));
-        return true;
-    }
-};
-
-template <std::integral To>
-class converter<PyObject, To> {
-public:
-    template <size_t Idx, argument::declaration... Ts>
-    static bool try_emplace(
-        argument::tuple<Ts...>& dst, PyObject* src) noexcept {
-        if (auto ptr = dynamic_ptr_cast<PyLongObject>(src)) {
-            return converter<PyLongObject, To>::try_emplace<Idx>(dst, ptr);
-        }
-
-        PyErr_Format(PyExc_TypeError,
-            "Argument conversion failed, Reason=[Unexpected argument type], "
-            "Type=[%s]",
-            src ? Py_TYPE(src)->tp_name : "nullptr");
-        return false;
-    }
-};
-
-template <std::unsigned_integral To>
-class converter<PyLongObject, To> {
-public:
-    template <size_t Idx, argument::declaration... Ts>
-    static bool try_emplace(
-        argument::tuple<Ts...>& dst, PyLongObject* src) noexcept {
-        static constexpr auto kInvalid = static_cast<unsigned long long>(-1);
-        auto value = PyLong_AsUnsignedLongLong(as_pyobject(src));
-        if (value == kInvalid && PyErr_Occurred()) [[unlikely]] {
-            return false;
-        }
-
-        details::invoke_emplace_at<Idx, To>(dst, static_cast<To>(value));
-        return true;
-    }
-};
-
-template <>
-class converter<PyLongObject, char> {
-public:
-    template <size_t Idx, argument::declaration... Ts>
-    static bool try_emplace(
-        argument::tuple<Ts...>& dst, PyLongObject* src) noexcept {
-        static constexpr auto kInvalid = -1L;
-        auto value = PyLong_AsLong(as_pyobject(src));
-        if (value == kInvalid && PyErr_Occurred()) [[unlikely]] {
-            return false;
-        }
-
-        details::invoke_emplace_at<Idx, char>(dst, static_cast<To>(value));
-        return true;
-    }
-};
-
-template <std::signed_integral To>
-class converter<PyLongObject, To> {
-public:
-    template <size_t Idx, argument::declaration... Ts>
-    static bool try_emplace(
-        argument::tuple<Ts...>& dst, PyLongObject* src) noexcept {
-        static constexpr auto kInvalid = static_cast<unsigned long long>(-1);
-        auto value = PyLong_AsLongLong(as_pyobject(src));
-        if (value == kInvalid && PyErr_Occurred()) [[unlikely]] {
-            return false;
-        }
-
-        details::invoke_emplace_at<Idx, To>(dst, static_cast<To>(value));
-        return true;
-    }
-};
-
-template <std::floating_point To>
-class converter<PyObject, To> {
-public:
-    template <size_t Idx, argument::declaration... Ts>
-    static bool try_emplace(
-        argument::tuple<Ts...>& dst, PyObject* src) noexcept {
-        if (auto ptr = dynamic_ptr_cast<PyFloatObject>(src)) {
-            return converter<PyFloatObject, To>::try_emplace<Idx>(dst, ptr);
-        }
-
-        // Numpy?
-
-        PyErr_Format(PyExc_TypeError,
-            "Argument conversion failed, Reason=[Unexpected argument type], "
-            "Type=[%s]",
-            src ? Py_TYPE(src)->tp_name : "nullptr");
-        return false;
-    }
-};
-
-template <std::floating_point To>
-class converter<PyFloatObject, To> {
-public:
-    template <size_t Idx, argument::declaration... Ts>
-    static bool try_emplace(
-        argument::tuple<Ts...>& dst, PyFloatObject* src) noexcept {
-        auto value = PyFloat_AsDouble(src);
-        if (value == -1.0 && PyErr_Occurred()) [[unlikely]] {
-            return false;
-        }
-
-        details::invoke_emplace_at<Idx, To>(dst, static_cast<To>(value));
-        return true;
-    }
-};
-
-template <typename... Vs>
-class converter<PyObject, std::variant<Vs...>> {
-public:
-    template <size_t Idx, argument::declaration... Ts>
-    requires std::same_as<template_element_t<Idx, typelist<Ts...>>,
-        std::variant<Vs...>>
-    static bool try_emplace(
-        argument::tuple<Ts...>& dst, PyObject* src) noexcept {
-        return (... || converter<PyObject, Vs>::try_emplace<Idx>(dst, src));
-    }
-};
 
 } // namespace argument
 } // namespace lev

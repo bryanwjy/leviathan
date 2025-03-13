@@ -60,92 +60,108 @@ class LEV_API jump_table<T, Ns...> {
     template <size_t I>
     using ith_type = std::integral_constant<T, get_value(I)>;
 
-    template <typename F, typename U = T>
-    using result_type = std::conditional_t<std::invocable<F, U>,
-        details::multi_return_t<std::invoke_result_t<F, U>,
-            std::invoke_result_t<F, std::integral_constant<T, Ns>>...>,
-        details::multi_return_t<
-            std::invoke_result_t<F, std::integral_constant<T, Ns>>...>>;
-    template <typename F, typename U = T>
-    using result_type_t = typename result_type<F, U>::type;
+    template <typename F, typename... Args>
+    using result_type = std::conditional_t<std::invocable<F, T const&, Args...>,
+        details::multi_return_t<std::invoke_result_t<F, T const&, Args...>,
+            std::invoke_result_t<F, std::integral_constant<T, Ns>, Args...>...>,
+        details::multi_return_t<std::invoke_result_t<F,
+            std::integral_constant<T, Ns>, Args...>...>>;
+    template <typename F>
+    using result_type_t = typename result_type<F, T>::type;
 
-    template <typename U, std::invocable<U> F>
+    template <typename F, typename... Args>
+    requires (std::invocable<F, T, Args...>)
     LEV_HIDE_INSTANTIATION static constexpr decltype(auto) default_(
-        F&& callable, U&& value) noexcept(std::is_nothrow_invocable_v<F, U>) {
-        return std::invoke(std::forward<F>(callable), std::forward<U>(value));
+        F&& callable, T const& value,
+        Args&&... args) noexcept(std::is_nothrow_invocable_v<F, T, Args...>) {
+        return std::invoke(
+            std::forward<F>(callable), value, std::forward<Args>(args)...);
     }
 
-    template <typename F, typename U>
-    requires (
-        !std::invocable<F, T const&> && !std::is_void_v<result_type_t<F, U>>)
-    LEV_HIDE_INSTANTIATION [[noreturn]] static constexpr result_type_t<F, U>
-    default_(F&& callable, T const&) noexcept {
+    template <typename F, typename... Args>
+    requires (!std::invocable<F, T, Args...> &&
+        !std::is_void_v<result_type_t<F, Args...>>)
+    LEV_HIDE_INSTANTIATION
+        [[noreturn]] static constexpr result_type_t<F, Args...>
+        default_(F&& callable, T const&, Args&&... args) noexcept {
         // If the callable can returns a result, but there's no default case,
         // we cannot reach it
         LEV_UNREACHABLE();
     }
 
-    template <typename F, typename U>
-    requires (!std::invocable<F, T const&>)
-    LEV_HIDE_INSTANTIATION [[noreturn]] static constexpr void default_(
-        F&& callable, T const&) noexcept {
-        // If the callable can returns nothing, the default case can be ignored
+    template <typename F, typename... Args>
+    requires (!std::invocable<F, T, Args...>)
+    LEV_HIDE_INSTANTIATION static constexpr void default_(
+        F&& callable, T const&, Args&&...) noexcept {
+        // If the callable returns nothing, the default case can be ignored
     }
 
-    template <size_t I, std::invocable<ith_type<I>> F, typename U>
+    template <size_t I, typename F, typename... Args>
+    requires (std::invocable<F, ith_type<I>, Args...>)
     LEV_HIDE_INSTANTIATION static constexpr decltype(auto) case_(F&& callable,
-        T const&) noexcept(std::is_nothrow_invocable_v<F, ith_type<I>>) {
-        return std::invoke(std::forward<F>(callable), ith_type<I>{});
+        T const&,
+        Args&&... args) noexcept(std::is_nothrow_invocable_v<F, ith_type<I>>) {
+        return std::invoke(std::forward<F>(callable), ith_type<I>{},
+            std::forward<Args>(args)...);
     }
 
-    template <size_t I, typename F, typename U>
+    template <size_t I, typename F, typename... Args>
     requires requires {
         requires (I >= size);
-        default_(std::declval<F>(), std::declval<U>());
+        default_(std::declval<F>(), std::declval<U>(), std::declval<Args>()...);
     }
-    LEV_HIDE_INSTANTIATION static constexpr decltype(auto)
-    case_(F&& callable, U&& value) noexcept(
-        noexcept(default_(std::declval<F>(), std::declval<U>()))) {
-        return default_(std::forward<F>(callable), std::forward<U>(value));
+    LEV_HIDE_INSTANTIATION static constexpr decltype(auto) case_(F&& callable,
+        T const& value,
+        Args&&... args) noexcept(noexcept(default_(std::declval<F>(),
+        std::declval<U>(), std::declval<Args>()...))) {
+        return default_(
+            std::forward<F>(callable), value, std::forward<Args>(args)...);
     }
 
-    template <size_t O, typename F, typename U>
+    template <size_t O, typename F, typename... Args>
     requires requires {
         requires (O >= size);
-        default_(std::declval<F>(), std::declval<U>());
+        default_(std::declval<F>(), std::declval<U>(), std::declval<Args>()...);
     }
-    LEV_HIDE_INSTANTIATION static constexpr decltype(auto)
-    next_(F&& callable, U&& value) noexcept(
-        noexcept(default_(std::declval<F>(), std::declval<U>()))) {
-        return default_(std::forward<F>(callable), std::forward<U>(value));
+    LEV_HIDE_INSTANTIATION static constexpr decltype(auto) next_(F&& callable,
+        T const& value,
+        Args&&... args) noexcept(noexcept(default_(std::declval<F>(),
+        std::declval<U>(), std::declval<Args>()...))) {
+        return default_(
+            std::forward<F>(callable), value, std::forward<Args>(args)...);
     }
 
-    template <size_t O, typename F, typename U>
+    template <size_t O, typename F, typename... Args>
     requires (size > O)
-    LEV_HIDE_INSTANTIATION static constexpr decltype(auto)
-    next_(F&& callable, U&& value) noexcept(
-        noexcept(impl<O>(std::declval<F>(), std::declval<U>()))) {
-        return impl<O>(std::forward<F>(callable), std::forward<U>(value));
+    LEV_HIDE_INSTANTIATION static constexpr decltype(auto) next_(F&& callable,
+        T const& value,
+        Args&&... args) noexcept(noexcept(impl<O>(std::declval<F>(),
+        std::declval<U>(), std::declval<Args>()...))) {
+        return impl<O>(
+            std::forward<F>(callable), value, std::forward<Args>(args)...);
     }
 
-    template <size_t O, typename F, typename U>
+    template <size_t O, typename F, typename... Args>
     LEV_HIDE_INSTANTIATION static constexpr is_nothrow_dispatchable_v =
         []<size_t... Is>(std::index_sequence<Is...>) {
-            return (
-                noexcept(next_<O + 16>(std::declval<F>(), std::declval<U>())) &&
-                ...&& noexcept(
-                    case_<O + 16>(std::declval<F>(), std::declval<U>())));
+            return (noexcept(next_<O + 16>(std::declval<F>(), std::declval<U>(),
+                        std::declval<Args>()...)) &&
+                ...&& noexcept(case_<O + 16>(std::declval<F>(),
+                    std::declval<U>(), std::declval<Args>()...)));
         }(std::make_index_sequence<16>{});
 
-    template <size_t O = 0, typename F, typename U>
-    LEV_HIDE_INSTANTIATION static constexpr result_type_t<F, U> impl(
-        F&& callable, U&& value) noexcept(is_nothrow_dispatchable_v<O, F, U>) {
-#define LEV_JT_CASE(X)     \
-    case get_value(O + X): \
-        return case_<O + X>(std::forward<F>(callable), std::forward<U>(value))
-#define LEV_JT_DEFAULT(X) \
-    default:              \
-        return next_<O + X>(std::forward<F>(callable), std::forward<U>(value))
+    template <size_t O, typename F, typename... Args>
+    LEV_HIDE_INSTANTIATION [[gnu::flatten]] static constexpr decltype(auto)
+    impl(F&& callable, T const& value, Args&&... args) noexcept(
+        is_nothrow_dispatchable_v<O, F, T, Args...>) {
+#define LEV_JT_CASE(X)       \
+    case get_value(O + X):   \
+        return case_<O + X>( \
+            std::forward<F>(callable), value, std::forward<Args>(args)...)
+#define LEV_JT_DEFAULT(X)    \
+    default:                 \
+        return next_<O + X>( \
+            std::forward<F>(callable), value, std::forward<Args>(args)...)
 
         switch (static_cast<T const&>(value)) {
             LEV_JT_CASE(0);
@@ -180,12 +196,14 @@ public:
 
     // if return type is not void, must have a default_case
     // if return type void, default_case is optional
-    template <typename F, std::convertible_to<T const&> U>
-    requires requires { typename result_type_t<F, U>; }
-    LEV_HIDE_INSTANTIATION constexpr result_type_t<F, U> operator()(
-        F&& callable, U&& value) const
-        noexcept(noexcept(impl(std::declval<F>(), std::declval<U>()))) {
-        return impl(std::forward<F>(callable), std::forward<U>(value));
+    template <typename F, std::convertible_to<T const&> U, typename... Args>
+    requires requires { typename result_type_t<F, Args...>; }
+    LEV_HIDE_INSTANTIATION constexpr decltype(auto) operator()(
+        F&& callable, U&& value, Args&&... args) const
+        noexcept(noexcept(impl<0>(std::declval<F>(), std::declval<U const&>(),
+            std::declval<Args>()...))) {
+        return impl<0>(std::forward<F>(callable), static_cast<T const&>(value),
+            std::forward<Args>(args)...);
     }
 };
 

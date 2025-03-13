@@ -678,9 +678,9 @@ class converter;
 
 template <named_declaration... Args>
 result_code populate(std::span<PyObject* const> args,
-    unmanaged_ptr<PyDictObject> kwargs, tuple<Args...>& tuple) noexcept {
+    python::kwargs_view kwargs, tuple<Args...>& tuple) noexcept {
 
-    auto array = sort(basic_call{args, kwargs}, Args::name...);
+    auto array = sort(basic_args{args, kwargs}, Args::name...);
 
     if (PyErr_Occurred()) {
         return result_code::failed;
@@ -709,7 +709,7 @@ result_code populate(std::span<PyObject* const> args,
 template <named_declaration... Args>
 result_code populate(std::span<PyObject* const> args,
     std::span<PyObject* const> kwnames, tuple<Args...>& tuple) noexcept {
-    auto array = sort(vector_call{args, kwnames}, Args::name...);
+    auto array = sort(vector_args{args, kwnames}, Args::name...);
 
     if (PyErr_Occurred()) {
         return result_code::failed;

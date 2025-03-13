@@ -9,6 +9,15 @@
 #include <utility>
 
 namespace lev {
+
+template <typename T>
+T const* addressof(T const&&) = delete;
+
+template <typename T>
+LEV_HIDDEN [[nodiscard, gnu::always_inline]] T* addressof(T& arg) noexcept {
+    return __builtin_addressof(arg);
+}
+
 struct LEV_API generator_t {
     LEV_HIDDEN explicit inline constexpr generator_t() noexcept = default;
 };
@@ -72,6 +81,85 @@ LEV_HIDDEN [[nodiscard]] constexpr auto forward_like(U&& u) noexcept
     return static_cast<std::add_rvalue_reference_t<
         copy_cvref_t<T, std::remove_reference_t<U>>>>(u);
 }
+
+namespace details {
+namespace tuple {
+
+template <size_t, typename T>
+void get(T&&) = delete;
+
+template <typename T, size_t I>
+concept has_adl_get = requires(T&& t) { get<I>(std::forward<T>(t)); };
+template <typename T, size_t I>
+concept has_member_get =
+    requires(T&& t) { std::forward<T>(t).template get<I>(); };
+
+template <typename T, size_t I>
+LEV_HIDDEN inline constexpr bool nothrow_member_get_v = false;
+template <typename T, size_t I>
+requires requires {
+    { std::declval<T>().template get<I>() } noexcept;
+}
+LEV_HIDDEN inline constexpr bool nothrow_member_get_v<T> = true;
+
+template <typename T, size_t I>
+LEV_HIDDEN inline constexpr bool nothrow_adl_get_v = false;
+template <typename T, size_t I>
+requires requires {
+    { get<I>(std::declval<T>()) } noexcept;
+}
+LEV_HIDDEN inline constexpr bool nothrow_adl_get_v<T> = true;
+
+template <size_t I>
+struct get_element_t {
+private:
+public:
+    constexpr explicit get_element_t() noexcept = default;
+
+    template <has_adl_get<I> T>
+    LEV_HIDE_INSTANTIATION
+        [[gnu::always_inline, nodiscard]] inline constexpr decltype(auto)
+        operator()(T&& t LEV_LIFETIMEBOUND) const
+        noexcept(nothrow_adl_get_v<T>) {
+        return get<I>(std::forward<T>(t));
+    }
+
+    template <has_member_get<I> T>
+    requires (!has_adl_get<T, I>)
+    LEV_HIDE_INSTANTIATION
+        [[gnu::always_inline, nodiscard]] inline constexpr decltype(auto)
+        operator()(T&& t LEV_LIFETIMEBOUND) const
+        noexcept(nothrow_member_get_v<T>) {
+        return std::forward<T>(t).template get<I>();
+    }
+};
+
+} // namespace tuple
+} // namespace details
+
+inline namespace cpo {
+template <size_t I>
+inline constexpr details::tuple::get_element_t<I> get_element{};
+}
+
+namespace details {
+namespace tuple {
+template <typename T>
+concept has_size = requires { std::tuple_size_v<T>; };
+template <typename T, size_t I>
+concept has_element = has_size<T> && requires(T t) {
+    requires I < tuple_size_v<T>;
+    typename std::tuple_element_t<I, T>;
+    get_element<I>(std::forward<T>(t));
+};
+} // namespace tuple
+} // namespace details
+
+template <typename T>
+concept tuple_like = (!std::is_reference_v<T> && details::tuple::has_size<T> &&
+    []<size_t... Is>(std::index_sequence<Is...>) {
+        return (... && details::tuple::has_element<T, Is>);
+    }(std::make_index_sequence<std::tuple_size_v<T>>{}));
 
 template <typename From, typename To>
 struct type_map {

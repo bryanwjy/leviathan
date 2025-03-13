@@ -41,10 +41,9 @@ class variant {
     LEV_HIDE_INSTANTIATION friend constexpr R visit(
         F&& callable, Vs&&... values);
 
-    using value_variant =
-        decltype([]<auto... Name, typename... Ts>(typed<Name..., Ts...>) {
-            return lev::variant<Ts...>{};
-        }(std::declval<T>()));
+    using value_variant = decltype([]<typename... Ts>(type<Ts...>) {
+        return lev::variant<Ts...>{};
+    }(std::declval<T>()));
 
 public:
     LEV_HIDE_INSTANTIATION inline constexpr size_t index() const noexcept {

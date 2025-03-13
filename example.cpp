@@ -92,32 +92,32 @@ struct foo : basic_object<MyClass> {
     static R init() noexcept(method::decorated_with<nothrow, D>);
 
     // define here
-    template <method_name_type auto Name, typename R, argument::declaration T,
+    template <string_literal auto Name, typename R, argument::declaration T,
         argument::declaration... Ts>
     requires add_adapted_method<
         adapted_method<foo, Name, vectorcall, R, T, Ts...>>::value
     R def(arguments<T, Ts...>) const;
 
-    template <method_name_type auto Name, typename R, argument::declaration T,
+    template <string_literal auto Name, typename R, argument::declaration T,
         argument::declaration... Ts>
     requires add_adapted_method<
         adapted_method<foo, Name, vectorcall, R, T, Ts...>>::value
     R def(arguments<T, Ts...>);
 
-    template <method_name_type auto Name, method::decorator auto D, typename R,
+    template <string_literal auto Name, method::decorator auto D, typename R,
         argument::declaration T, argument::declaration... Ts>
     requires add_adapted_method<
         adapted_method<foo, Name, D, R, T, Ts...>>::value
     R def(arguments<T, Ts...>) const
         noexcept(method::decorated_with<nothrow, D>);
 
-    template <method_name_type auto Name, method::decorator auto D, typename R,
+    template <string_literal auto Name, method::decorator auto D, typename R,
         argument::declaration T, argument::declaration... Ts>
     requires add_adapted_method<
         adapted_method<foo, Name, D, R, T, Ts...>>::value
     R def(arguments<T, Ts...>) noexcept(method::decorated_with<nothrow, D>);
 
-    template <method_name_type auto Name,
+    template <string_literal auto Name,
         method::decorated_with<static_method> auto D, typename R,
         argument::declaration T, argument::declaration... Ts>
     requires add_adapted_method<
@@ -125,50 +125,143 @@ struct foo : basic_object<MyClass> {
     static R def(arguments<T, Ts...>) noexcept(
         method::decorated_with<nothrow, D>);
 
-    template <method_name_type auto Name, typename R>
+    template <string_literal auto Name, typename R>
     requires add_adapted_method<adapted_method<foo, Name, vectorcall, R>>::value
     R def() const;
 
-    template <method_name_type auto Name, typename R>
+    template <string_literal auto Name, typename R>
     requires add_adapted_method<adapted_method<foo, Name, vectorcall, R>>::value
     R def();
 
-    template <method_name_type auto Name, method::decorator auto D, typename R>
+    template <string_literal auto Name, method::decorator auto D, typename R>
     requires add_adapted_method<adapted_method<foo, Name, D, R>>::value
     R def() const noexcept(method::decorated_with<nothrow, D>);
 
-    template <method_name_type auto Name, method::decorator auto D, typename R>
+    template <string_literal auto Name, method::decorator auto D, typename R>
     requires add_adapted_method<adapted_method<foo, Name, D, R>>::value
     R def() noexcept(method::decorated_with<nothrow, D>);
 
-    template <method_name_type auto Name,
+    template <string_literal auto Name,
         method::decorated_with<static_method> auto D, typename R>
     requires add_adapted_method<adapted_method<foo, Name, D, R>>::value
     static R def() noexcept(method::decorated_with<nothrow, D>);
 
-    template <method_name_type auto Name, auto F>
+    template <string_literal auto Name, auto F>
     requires add_direct_method<Name, foo, F>
     static auto def(uses<F>); // noexcept implied by F, static-ness implied by
                               // signature of F, no keywords allowed
+
+    template <string_literal auto Name>
+    requires add_adapted_method<adapted_method<foo, Name, vectorcall,
+        python_ptr<PyObject>, noconvert>>::value
+    python_ptr<PyObject> def(std::span<PyObject* const> args,
+        std::span<PyObject* const> kwargs, std::span<PyObject* const> kwnames);
+
+    template <string_literal auto Name>
+    requires add_adapted_method<adapted_method<foo, Name, vectorcall,
+        python_ptr<PyObject>, noconvert>>::value
+    python_ptr<PyObject> def(std::span<PyObject* const> args,
+        std::span<PyObject* const> kwargs,
+        std::span<PyObject* const> kwnames) const;
+
+    template <string_literal auto Name, method::decorator auto D>
+    requires add_adapted_method<
+        adapted_method<foo, Name, D, python_ptr<PyObject>>>::value
+    python_ptr<PyObject> def(std::span<PyObject* const> args,
+        std::span<PyObject* const> kwargs,
+        std::span<PyObject* const>
+            kwnames) noexcept(method::decorated_with<nothrow, D>);
+
+    template <string_literal auto Name, method::decorator auto D>
+    requires add_adapted_method<
+        adapted_method<foo, Name, D, python_ptr<PyObject>>>::value
+    python_ptr<PyObject> def(std::span<PyObject* const> args,
+        std::span<PyObject* const> kwargs,
+        std::span<PyObject* const> kwnames) const
+        noexcept(method::decorated_with<nothrow, D>);
+
+    template <string_literal auto Name,
+        method::decorated_with<static_method> auto D>
+    requires add_adapted_method<adapted_method<foo, Name, D, R>>::value
+    static python_ptr<PyObject> def(std::span<PyObject* const> args,
+        std::span<PyObject* const> kwargs,
+        std::span<PyObject* const>
+            kwnames) noexcept(method::decorated_with<nothrow, D>);
+
+    template <string_literal auto Name>
+    requires add_adapted_method<adapted_method<foo, Name, basic_call,
+        python_ptr<PyObject>, noconvert>>::value
+    python_ptr<PyObject> def(std::span<PyObject* const> args, str_dict kwargs);
+
+    template <string_literal auto Name>
+    requires add_adapted_method<adapted_method<foo, Name, basic_call,
+        python_ptr<PyObject>, noconvert>>::value
+    python_ptr<PyObject> def(
+        std::span<PyObject* const> args, str_dict kwargs) const;
+
+    template <string_literal auto Name, method::decorator auto D>
+    requires add_adapted_method<
+        adapted_method<foo, Name, D, python_ptr<PyObject>>>::value
+    python_ptr<PyObject> def(std::span<PyObject* const> args,
+        str_dict kwargs) noexcept(method::decorated_with<nothrow, D>);
+
+    template <string_literal auto Name, method::decorator auto D>
+    requires add_adapted_method<
+        adapted_method<foo, Name, D, python_ptr<PyObject>>>::value
+    python_ptr<PyObject> def(std::span<PyObject* const> args,
+        str_dict kwargs) const noexcept(method::decorated_with<nothrow, D>);
+
+    template <string_literal auto Name,
+        method::decorated_with<static_method> auto D>
+    requires add_adapted_method<adapted_method<foo, Name, D, R>>::value
+    static python_ptr<PyObject> def(std::span<PyObject* const> args,
+        str_dict kwargs) noexcept(method::decorated_with<nothrow, D>);
+
+    template <string_literal auto Name>
+    requires add_adapted_method<adapted_method<foo, Name, vectorcall,
+        python_ptr<PyObject>, noconvert>>::value
+    python_ptr<PyObject> def(std::span<PyObject* const> args);
+
+    template <string_literal auto Name>
+    requires add_adapted_method<adapted_method<foo, Name, vectorcall,
+        python_ptr<PyObject>, noconvert>>::value
+    python_ptr<PyObject> def(std::span<PyObject* const> args) const;
+
+    template <string_literal auto Name, method::decorator auto D>
+    requires add_adapted_method<
+        adapted_method<foo, Name, D, python_ptr<PyObject>>>::value
+    python_ptr<PyObject> def(std::span<PyObject* const> args) noexcept(
+        method::decorated_with<nothrow, D>);
+
+    template <string_literal auto Name, method::decorator auto D>
+    requires add_adapted_method<
+        adapted_method<foo, Name, D, python_ptr<PyObject>>>::value
+    python_ptr<PyObject> def(std::span<PyObject* const> args) const
+        noexcept(method::decorated_with<nothrow, D>);
+
+    template <string_literal auto Name,
+        method::decorated_with<static_method> auto D>
+    requires add_adapted_method<adapted_method<foo, Name, D, R>>::value
+    static python_ptr<PyObject> def(std::span<PyObject* const> args) noexcept(
+        method::decorated_with<nothrow, D>);
     // MACRO END
 
     template <>
-    void init(arguments<typed<"name"_arg, std::string_view>,
-        typed<"age"_arg, unsigned>>
+    void init(arguments<arg<std::string_view>("name"_a), arg<unsigned>("age"_a)>
             args) noexcept {
         //
     }
 
     template <>
-    python_ptr<foo> init<nothrow>(arguments<typed<"name"_arg, std::string_view>,
-        typed<"age"_arg, unsigned>>
+    python_ptr<foo> init<nothrow>(
+        arguments<arg<std::string_view>("name"_a), arg<unsigned>("age"_a)>
             args) noexcept {
         //
     }
 
     template <>
-    auto def<"func"_str>(arguments<typed<"key"_arg, unsigned>,
-        typed<"value"_arg, float>, typed<"value2"_opt, float>>
+    auto def<"func"_str>(arguments<arg<unsigned>("key"_a),
+        arg<float>("value"_a), arg<float>("value2"_a) = opt>
             args) const -> int {
         {
             auto const& [key, value] = args.mandatory();

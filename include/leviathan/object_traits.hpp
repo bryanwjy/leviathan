@@ -134,4 +134,14 @@ concept opaque_pyobj = is_opaque_pyobj_v<T>;
 template <typename T>
 concept pyobj_type = opaque_pyobj<T> || native_pyobj<T> || leviathan_pyobj<T>;
 
+template <typename D, typename B>
+concept pyobj_derived_from =
+    pyobj_type<B> && std::derived_from<D, B> && aliasable_subobject_of<D, B>;
+
+template <typename B, typename D>
+concept pyobj_base_of = pyobj_derived_from<D, B>;
+
+template <typename B, typename D>
+concept pyobj_related_to = pyobj_derived_from<D, B> || pyobj_derived_from<B, D>;
+
 } // namespace lev

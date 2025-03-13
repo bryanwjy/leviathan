@@ -154,16 +154,12 @@ public:
     LEV_HIDE_INSTANTIATION constexpr python_ptr() noexcept : ptr_{nullptr} {}
     LEV_HIDE_INSTANTIATION constexpr python_ptr(decltype(nullptr)) noexcept
         : python_ptr{} {}
-    LEV_HIDE_INSTANTIATION constexpr explicit python_ptr(Obj* ptr) noexcept
-        : python_ptr{retain_object, ptr} {}
+
     LEV_HIDE_INSTANTIATION constexpr python_ptr(retain_t, Obj* ptr) noexcept
         : ptr_{ptr} {}
     LEV_HIDE_INSTANTIATION constexpr python_ptr(adopt_t, Obj* ptr) noexcept
         : ptr_{Py_NewRef(as_pyobject(ptr))} {}
 
-    LEV_HIDE_INSTANTIATION constexpr explicit python_ptr(
-        unmanaged_ptr<Obj> ptr) noexcept
-        : python_ptr{retain_object, ptr} {}
     LEV_HIDE_INSTANTIATION constexpr python_ptr(
         retain_t, unmanaged_ptr<Obj> ptr) noexcept
         : ptr_{ptr} {}
@@ -173,7 +169,7 @@ public:
 
     LEV_HIDE_INSTANTIATION constexpr python_ptr(
         python_ptr const& other) noexcept
-        : ptr_{Py_NewRef(as_pyobject(other.ptr_))} {}
+        : ptr_{Py_XNewRef(as_pyobject(other.ptr_))} {}
     LEV_HIDE_INSTANTIATION constexpr python_ptr& operator=(
         python_ptr const& other) noexcept {
         if (this != &other) {
@@ -261,26 +257,33 @@ public:
         return *ptr_;
     }
 
-    LEV_HIDE_INSTANTIATION constexpr unmanaged_ptr<Obj> get() const noexcept {
+    LEV_HIDE_INSTANTIATION constexpr unmanaged_ptr<Obj>
+    get() const noexcept LEV_LIFETIMEBOUND {
         return ptr_;
     }
 
-    LEV_HIDE_INSTANTIATION unmanaged_ptr<Obj> release() noexcept {
+    [[clang::reinitializes]] LEV_HIDE_INSTANTIATION unmanaged_ptr<Obj>
+    release() noexcept {
         return exchange(ptr_, nullptr);
     }
 
-    LEV_HIDE_INSTANTIATION constexpr void reset() noexcept {
+    [[clang::reinitializes]] LEV_HIDE_INSTANTIATION constexpr void
+    reset() noexcept {
         Py_XDECREF(as_pyobject(exchange(ptr_, nullptr)));
     }
 
-    LEV_HIDE_INSTANTIATION void reset(retain_t, decltype(nullptr)) = delete;
-    LEV_HIDE_INSTANTIATION void reset(adopt_t, decltype(nullptr)) = delete;
+    [[clang::reinitializes]] LEV_HIDE_INSTANTIATION void reset(
+        retain_t, decltype(nullptr)) = delete;
+    [[clang::reinitializes]] LEV_HIDE_INSTANTIATION void reset(
+        adopt_t, decltype(nullptr)) = delete;
 
-    LEV_HIDE_INSTANTIATION constexpr void reset(retain_t, Obj* ptr) noexcept {
+    [[clang::reinitializes]] LEV_HIDE_INSTANTIATION constexpr void reset(
+        retain_t, Obj* ptr) noexcept {
         Py_XDECREF(as_pyobject(exchange(ptr_, ptr)));
     }
 
-    LEV_HIDE_INSTANTIATION constexpr void reset(adopt_t, Obj* ptr) noexcept {
+    [[clang::reinitializes]] LEV_HIDE_INSTANTIATION constexpr void reset(
+        adopt_t, Obj* ptr) noexcept {
         Py_INCREF(as_pyobject(ptr));
         Py_XDECREF(as_pyobject(exchange(ptr_, ptr)));
     }
@@ -380,7 +383,7 @@ public:
     requires std::is_convertible_v<U*, T*>
     LEV_HIDE_INSTANTIATION constexpr unmanaged_ptr(
         unmanaged_ptr<U> const& other) noexcept
-        : ptr_{py_cast<T>(other.get())} {}
+        : ptr_{other.get()} {}
 
     template <typename U>
     requires std::is_convertible_v<U*, T*>

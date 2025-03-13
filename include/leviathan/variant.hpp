@@ -4,12 +4,12 @@
 #include "leviathan/conditionally_overlapable.hpp"
 #include "leviathan/jump_table.hpp"
 #include "leviathan/type_traits.hpp"
+#include "leviathan/utility.hpp"
 
 #include <array>
 #include <compare>
 #include <exception>
 #include <initializer_list>
-#include <memory>
 #include <ranges>
 
 namespace lev {
@@ -406,7 +406,7 @@ class variant_base {
         requires (allow_external_overlap &&
             (... && std::is_trivially_destructible_v<Ts>))
         {
-            std::destroy_at(std::addressof(union_.data));
+            std::destroy_at(addressof(union_.data));
         }
 
         LEV_HIDE_INSTANTIATION inline constexpr void destroy_union() noexcept
@@ -414,7 +414,7 @@ class variant_base {
             (... || !std::is_trivially_destructible_v<Ts>))
         {
             destroy_member();
-            std::destroy_at(std::addressof(union_.data));
+            std::destroy_at(addressof(union_.data));
         }
 
         template <typename U, typename... Args>
@@ -427,7 +427,7 @@ class variant_base {
             static_assert(
                 template_index_v<U, union_type> < template_size_v<union_type>);
             auto ptr = std::construct_at(
-                std::addressof(union_.data), tag, std::forward<Args>(args)...);
+                addressof(union_.data), tag, std::forward<Args>(args)...);
             index_ = template_index_v<U, union_type>;
             return ptr;
         }
@@ -442,7 +442,7 @@ class variant_base {
         {
             static_assert(I < template_size_v<union_type>);
             auto ptr = std::construct_at(
-                std::addressof(union_.data), tag, std::forward<Args>(args)...);
+                addressof(union_.data), tag, std::forward<Args>(args)...);
             index_ = I;
             return ptr;
         }
@@ -456,8 +456,7 @@ class variant_base {
         LEV_HIDE_INSTANTIATION inline constexpr void destroy_member() noexcept {
             jump_table_for<union_type>(
                 []<size_t I>(size_constant<I>) {
-                    std::destroy_at(
-                        std::addressof(union_.data.template get<I>()));
+                    std::destroy_at(addressof(union_.data.template get<I>()));
                 },
                 static_cast<size_t>(index_));
         }
@@ -736,9 +735,9 @@ private:
         std::is_nothrow_constructible_v<template_element_t<I, union_type>,
             Args...>) {
         if constexpr (place_index_in_tail) {
-            std::construct_at(std::addressof(container_.data),
+            std::construct_at(addressof(container_.data),
                 std::in_place_index<I>, std::forward<Args>(args)...);
-            return std::addressof(value_ref<I>());
+            return addressof(value_ref<I>());
         } else {
             return container_.data.construct_union(
                 std::in_place_index<I>, std::forward<Args>(args)...);
@@ -751,10 +750,9 @@ private:
         std::is_nothrow_invocable_r_v<template_element_t<I, union_type>, F,
             Args...>) {
         if constexpr (place_index_in_tail) {
-            std::construct_at(std::addressof(container_.data),
-                generator_index<I>, std::forward<F>(callable),
-                std::forward<Args>(args)...);
-            return std::addressof(value_ref<I>());
+            std::construct_at(addressof(container_.data), generator_index<I>,
+                std::forward<F>(callable), std::forward<Args>(args)...);
+            return addressof(value_ref<I>());
         } else {
             return container_.data.construct_union(generator_index<I>,
                 std::forward<F>(callable), std::forward<Args>(args)...);
@@ -763,7 +761,7 @@ private:
 
     LEV_HIDE_INSTANTIATION inline constexpr void destroy() noexcept {
         if constexpr (place_index_in_tail) {
-            std::destroy_at(std::addressof(container_.data));
+            std::destroy_at(addressof(container_.data));
         } else {
             container_.data.destroy_union();
         }
@@ -798,7 +796,7 @@ template <size_t I>
 LEV_HIDDEN inline constexpr bool is_tag_type_v<generator_index_t<I>> = true;
 
 template <typename Arg, typename List>
-struct resolve_constructor;
+struct resolve_conversion;
 
 template <typename Arg, typename T>
 struct resolve_identity {
@@ -809,13 +807,13 @@ struct resolve_identity {
 };
 
 template <typename Arg, template <typename...> List, typename... Ts>
-struct resolve_constructor<Arg, List<Ts...>> : resolve_identity<Arg, Ts>... {
+struct resolve_conversion<Arg, List<Ts...>> : resolve_identity<Arg, Ts>... {
     using resolve_identity<Arg, Ts>::operator()...;
 };
 
 template <typename T, typename List>
 using resolve_conversion_t =
-    std::invoke_result_t<resolve_constructor<T, List>, T>;
+    std::invoke_result_t<resolve_conversion<T, List>, T>;
 
 [[gnu::noinline, noreturn]] void throw_bad_variant_access() {
     throw bad_variant_access();
@@ -1192,7 +1190,7 @@ public:
             template_element_t<I, variant> const>
         get_if(variant const* val) noexcept {
         if (val && val->index() == I) {
-            return std::addressof(val.template value_ref<I>());
+            return addressof(val.template value_ref<I>());
         }
 
         return nullptr;
@@ -1205,7 +1203,7 @@ public:
             template_element_t<I, variant>>
         get_if(variant* val) noexcept {
         if (val && val->index() == I) {
-            return std::addressof(val.template value_ref<I>());
+            return addressof(val.template value_ref<I>());
         }
         return nullptr;
     }
@@ -1357,28 +1355,28 @@ public:
 
 namespace details {
 template <typename F, typename V, typename... Vs>
-LEV_HIDE_INSTANTIATION inline constexpr decltype(auto) variant_visitor(
-    F&& callable, V&& value, Vs&&... values) {
+LEV_HIDE_INSTANTIATION [[gnu::flatten]] inline constexpr decltype(auto)
+variant_visitor(F&& callable, V&& value, Vs&&... values) {
     if constexpr (sizeof...(Vs) == 0) {
         return std::forward<V>(value).visit(std::forward<F>(callable));
     } else {
         using variant_type = std::remove_cvref_t<V>;
         return visit_table_for<variant_type>(
-            [&]<size_t I>(size_constant<I>) -> decltype(auto) {
-                return variant_visitor(
-                    [&](auto&&... others) {
+            [&callable, &value]<size_t I>(size_constant<I>, Vs&&... tail) -> R {
+                return variant_visitor<R>(
+                    [&callable, &value]<typename T>(T&&... others) {
                         return std::invoke(std::forward<F>(callable),
                             get<I>(std::forward<V>(value)),
-                            std::forward<decltype(others)>(others)...);
+                            std::forward<T>(others)...);
                     },
-                    std::forward<Vs>(values)...);
+                    std::forward<Vs>(tail)...);
             },
-            value.index());
+            value.index(), std::forward<Vs>(values)...);
     }
 }
 
 template <typename R, typename F, typename V, typename... Vs>
-LEV_HIDE_INSTANTIATION inline constexpr R variant_visitor(
+LEV_HIDE_INSTANTIATION [[gnu::flatten]] inline constexpr R variant_visitor(
     F&& callable, V&& value, Vs&&... values) {
 
     using variant_type = std::remove_cvref_t<V>;
@@ -1388,33 +1386,41 @@ LEV_HIDE_INSTANTIATION inline constexpr R variant_visitor(
     } else {
         using variant_type = std::remove_cvref_t<V>;
         return visit_table_for<variant_type>(
-            [&]<size_t I>(size_constant<I>) -> R {
+            [&callable, &value]<size_t I>(size_constant<I>, Vs&&... tail) -> R {
                 return variant_visitor<R>(
-                    [](auto&&... others) {
-                        return std::invoke(std::forward<F>(callable),
+                    [&callable, &value]<typename T>(T&&... others) {
+                        return std::invoke_r<R>(std::forward<F>(callable),
                             get<I>(std::forward<V>(value)),
-                            std::forward<decltype(others)>(others)...);
+                            std::forward<T>(others)...);
                     },
-                    std::forward<Vs>(values)...);
+                    std::forward<Vs>(tail)...);
             },
-            value.index());
+            value.index(), std::forward<Vs>(values)...);
     }
 }
 
 } // namespace details
 
 template <typename F, typename... Vs>
-requires requires { details::as_variant(std::declval<Vs>()); }
+requires requires { (..., details::as_variant(std::declval<Vs>())); }
 LEV_HIDE_INSTANTIATION inline constexpr decltype(auto) visit(
     F&& callable, Vs&&... values) {
-    return details::variant_visitor(
-        std::forward<F>(callable), std::forward<Vs>(values)...);
+    if constexpr (sizeof...(Vs) == 0) {
+        return std::invoke_r<R>(std::forward<F>(callable));
+    } else {
+        return details::variant_visitor(std::forward<F>(callable),
+            details::as_variant(std::forward<Vs>(values))...);
+    }
 }
 
 template <typename R, typename F, typename... Vs>
-requires requires { details::as_variant(std::declval<Vs>()); }
+requires requires { (..., details::as_variant(std::declval<Vs>())); }
 LEV_HIDE_INSTANTIATION inline constexpr R visit(F&& callable, Vs&&... values) {
-    return details::variant_visitor<R>(
-        std::forward<F>(callable), std::forward<Vs>(values)...);
+    if constexpr (sizeof...(Vs) == 0) {
+        return std::invoke_r<R>(std::forward<F>(callable));
+    } else {
+        return details::variant_visitor<R>(std::forward<F>(callable),
+            details::as_variant(std::forward<Vs>(values))...);
+    }
 }
 } // namespace lev

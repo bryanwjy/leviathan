@@ -6,6 +6,7 @@
 
 #include <Python.h>
 
+#include <bit>
 #include <concepts>
 #include <ranges>
 
@@ -14,12 +15,12 @@ namespace details {
 struct basic_args {
 public:
     LEV_HIDE_INSTANTIATION basic_args(
-        std::span<PyObject* const> args, py::views::kwargs kwargs = {}) noexcept
-        : args{args}
+        py::views::array<PyObject> args, py::views::kwargs kwargs = {}) noexcept
+        : args{args.span()}
         , kwargs{kwargs} {}
 
     template <size_t N, size_t O>
-    LEV_HIDE_INSTANTIATION std::array<PyObject*, N + O> sort(
+    LEV_HIDE_INSTANTIATION [[nodiscard]] std::array<PyObject*, N + O> sort(
         std::span<PyASCIIObject* const> mandatory,
         std::span<PyASCIIObject* const> optional) const noexcept {
         static constexpr size_t = kTotal = N + O;
@@ -56,7 +57,8 @@ public:
     }
 
     template <size_t N, size_t O>
-    LEV_HIDE_INSTANTIATION std::array<PyObject*, N + O> sort() const noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] std::array<PyObject*, N + O>
+    sort() const noexcept {
         static constexpr size_t kTotal = N + O;
         if (!verify_count<N, O>()) {
             return {};
@@ -80,20 +82,23 @@ private:
         details::raise_count_error(Mandatory, Optional, received);
         return false;
     }
+
     std::span<PyObject* const> args;
     py::views::kwargs kwargs;
 };
 
 class vector_args {
+    using span_type = std::span<PyObject* const>;
+
 public:
-    LEV_HIDE_INSTANTIATION vector_args(std::span<PyObject* const> args,
-        std::span<PyObject* const> kwnames = {}) noexcept
-        : args{args}
-        , kwargs{args.data() + args.size(), kwnames.size()}
+    LEV_HIDE_INSTANTIATION vector_args(py::span<PyObject> all_args,
+        py::views::array<PyASCIIObject> kwnames = {}) noexcept
+        : args{static_cast<span_type>(all_args.subspan(0, kwnames.size()))}
+        , kwargs{static_cast<span_type>(all_args.subspan(kwnames.size()))}
         , kwnames{kwnames} {}
 
     template <size_t N, size_t O>
-    LEV_HIDE_INSTANTIATION std::array<PyObject*, N + O> sort(
+    LEV_HIDE_INSTANTIATION [[nodiscard]] std::array<PyObject*, N + O> sort(
         std::span<char const*, N> mandatory,
         std::span<char const*, O> optionals) const noexcept {
         static constexpr size_t kTotal = N + O;
@@ -126,7 +131,8 @@ public:
     }
 
     template <size_t N, size_t O>
-    LEV_HIDE_INSTANTIATION std::array<PyObject*, N + O> sort() const noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] std::array<PyObject*, N + O>
+    sort() const noexcept {
         static constexpr size_t kTotal = N + O;
         if (!verify_count<N, O>()) {
             return {};
@@ -148,8 +154,8 @@ private:
         BitSet assigned{(1ULL << positionals) - 1ULL};
         while (!assigned.all()) {
             auto const mask = assigned.to_ullong();
-            auto const offset = countr_one(mask);
-            auto const end = offset + countr_zero(mask >> offset);
+            auto const offset = std::countr_one(mask);
+            auto const end = offset + std::countr_zero(mask >> offset);
             for (auto name_it : std::views::iota(
                      mandatory.begin() + offset, mandatory.begin() + end)) {
                 auto kwnit =
@@ -182,8 +188,8 @@ private:
         std::span<char const*> unsorted_optionals) const noexcept {
         std::ranges::transform(
             unsorted_optionals, output.begin(), [this](char const* name) {
-                auto kwnit =
-                    std::ranges::find_if(kwnames, [=](PyObject* unicode) {
+                auto kwnit = std::ranges::find_if(
+                    kwnames, [=](unmanged_ptr<PyASCIIObject> unicode) {
                         return PyUnicode_CompareWithASCIIString(
                                    unicode, name) == 0;
                     });
@@ -208,9 +214,9 @@ private:
         return false;
     }
 
-    std::span<PyObject* const> args;
-    std::span<PyObject* const> kwargs;
-    std::span<PyObject* const> kwnames;
+    span_type args;
+    span_type kwargs;
+    py::views::array<PyASCIIObject> kwnames;
 };
 
 template <named_declaration... Ns, optional_declaration... Os>

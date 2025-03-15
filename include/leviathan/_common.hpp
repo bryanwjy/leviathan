@@ -64,6 +64,7 @@
 #  error "No Unreachable"
 #endif
 
+#define LEV_THROW(...) throw __VA_ARGS__
 #define LEV_TRY try
 #define LEV_CATCH(...) catch (__VA_ARGS__)
 #define LEV_RETHROW() throw

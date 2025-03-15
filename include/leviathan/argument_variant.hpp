@@ -41,8 +41,8 @@ class variant {
     LEV_HIDE_INSTANTIATION friend constexpr R visit(
         F&& callable, Vs&&... values);
 
-    using value_variant = decltype([]<typename... Ts>(type<Ts...>) {
-        return lev::variant<Ts...>{};
+    using value_variant = decltype([]<typename... Us>(type<Us...>) {
+        return lev::variant<Us...>{};
     }(std::declval<T>()));
 
 public:
@@ -70,8 +70,8 @@ public:
     }
 
     using underlying_type =
-        decltype([]<auto... Name, typename... Ts>(typed<Name..., Ts...>) {
-            return lev::variant<lev::expected<Ts, E>...>{};
+        decltype([]<auto... Name, typename... Us>(typed<Name..., Us...>) {
+            return lev::variant<lev::expected<Us, E>...>{};
         }(std::declval<T>()));
 
     template <typename F>

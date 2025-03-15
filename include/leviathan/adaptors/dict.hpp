@@ -89,15 +89,10 @@ public:
         python_ptr<PyDictObject>&& ptr) noexcept
     requires (policy == ownership_policy::strong)
         : instance_{std::move(ptr)} {}
-    LEV_HIDE_INSTANTIATION explicit inline basic_dict(
+    LEV_HIDE_INSTANTIATION explicit inline constexpr basic_dict(
         python_ptr<PyDictObject> const& ptr) noexcept
     requires (policy == ownership_policy::strong)
         : instance_{ptr} {}
-
-    LEV_HIDE_INSTANTIATION explicit inline constexpr basic_dict(
-        python_ptr<PyDictObject> const& ptr LEV_LIFETIMEBOUND) noexcept
-    requires (policy == ownership_policy::none)
-        : instance_{ptr.get()} {}
 
     template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V>
     LEV_HIDE_INSTANTIATION inline constexpr basic_dict(
@@ -108,13 +103,29 @@ public:
     LEV_HIDE_INSTANTIATION inline constexpr basic_dict(
         basic_dict<K, V, policy>&& other) noexcept
     requires (policy == ownership_policy::strong)
-        : instance_{other.instance_} {}
+        : instance_{std::move(other.instance_)} {}
     template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V,
         ownership_policy P>
     LEV_HIDE_INSTANTIATION explicit inline basic_dict(
         basic_dict<K, V, P> const& other) noexcept
     requires (policy == ownership_policy::strong)
         : instance_{adopt_object, other.instance_.get()} {}
+
+    template <pyobj_related_to<Key> K, pyobj_related_to<T> V>
+    LEV_HIDE_INSTANTIATION explicit inline constexpr basic_dict(
+        basic_dict<K, V, policy> const& other) noexcept
+    requires (policy == ownership_policy::strong)
+        : instance_{other.instance_} {}
+    template <pyobj_related_to<Key> K, pyobj_related_to<T> V>
+    LEV_HIDE_INSTANTIATION explicit inline constexpr basic_dict(
+        basic_dict<K, V, policy>&& other) noexcept
+    requires (policy == ownership_policy::strong)
+        : instance_{other.instance_} {}
+
+    LEV_HIDE_INSTANTIATION explicit inline constexpr basic_dict(
+        python_ptr<PyDictObject> const& ptr LEV_LIFETIMEBOUND) noexcept
+    requires (policy == ownership_policy::none)
+        : instance_{ptr.get()} {}
 
     template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V>
     LEV_HIDE_INSTANTIATION inline constexpr basic_dict(
@@ -129,16 +140,6 @@ public:
     requires (policy == ownership_policy::none)
         : instance_{other.instance_.get()} {}
 
-    template <pyobj_related_to<Key> K, pyobj_related_to<T> V>
-    LEV_HIDE_INSTANTIATION explicit inline constexpr basic_dict(
-        basic_dict<K, V, policy> const& other) noexcept
-    requires (policy == ownership_policy::strong)
-        : instance_{other.instance_} {}
-    template <pyobj_related_to<Key> K, pyobj_related_to<T> V>
-    LEV_HIDE_INSTANTIATION explicit inline constexpr basic_dict(
-        basic_dict<K, V, policy>&& other) noexcept
-    requires (policy == ownership_policy::strong)
-        : instance_{other.instance_} {}
     template <pyobj_related_to<Key> K, pyobj_related_to<T> V,
         ownership_policy P>
     LEV_HIDE_INSTANTIATION explicit inline basic_dict(
@@ -268,21 +269,6 @@ public:
     requires (policy == ownership_policy::strong)
     {
         return instance_.get();
-    }
-
-    LEV_HIDE_INSTANTIATION
-    [[nodiscard]] inline constexpr unmanaged_ptr<PyDictObject>
-    release() noexcept
-    requires (ownership_policy::strong == policy)
-    {
-        return instance_.release();
-    }
-
-    LEV_HIDE_INSTANTIATION [[clang::reninitializes]] inline constexpr void
-    reset(python_ptr<PyDictObject> other = {}) noexcept
-    requires (ownership_policy::strong == policy)
-    {
-        instance_ = std::move(other);
     }
 
     LEV_HIDE_INSTANTIATION

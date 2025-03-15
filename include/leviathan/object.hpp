@@ -14,9 +14,9 @@ protected:
     object_root(object_root const&) = delete;
     object_root& operator=(object_root const&) = delete;
 
-    LEV_HIDDEN inline object_root(python_ptr<PyTypeObject> type) noexcept
+    LEV_HIDDEN inline object_root(unmanaged_ptr<PyTypeObject> type) noexcept
         : PyObject{} {
-        PyObject_Init(static_cast<PyObject*>(this), type.release());
+        PyObject_Init(static_cast<PyObject*>(this), type.get());
     }
 
     LEV_HIDDEN inline constexpr ~object_root() noexcept = default;
@@ -31,13 +31,13 @@ public:
     using instantiation_concept = basic_instantiation;
 
     LEV_HIDE_INSTANTIATION inline basic_object() noexcept
-        : object_root{adaptor_traits<T>::type_object(adopt_object)} {}
+        : object_root{adaptor_traits<T>::type_object()} {}
 
     template <typename... Args>
     requires std::is_constructible_v<T, Args>
     LEV_HIDE_INSTANTIATION inline basic_object(Args&&... args) noexcept(
         std::is_nothrow_constructible_v<T, Args>)
-        : object_root{adaptor_traits<T>::type_object(adopt_object)}
+        : object_root{adaptor_traits<T>::type_object()}
         , storage_{std::in_place, std::forward<Args>(args)...} {}
 
     LEV_HIDE_INSTANTIATION inline constexpr bool initialized() const noexcept {
@@ -92,14 +92,14 @@ public:
                  std::is_nothrow_constructible_v<T, Args...>
     LEV_HIDE_INSTANTIATION explicit(is_explicit_constructible_v<T,
         Args...>) inline constexpr basic_object(Args&&... args) noexcept
-        : object_root{traits::type_object(adopt_object)}
+        : object_root{traits::type_object()}
         , object_{args...} {}
 
     template <typename... Args>
     requires std::constructible_from<T, Args...>
     LEV_HIDE_INSTANTIATION explicit(is_explicit_constructible_v<T, Args...>)
         basic_object(Args&&... args) try
-        : object_root{traits::type_object(adopt_object)}
+        : object_root{traits::type_object()}
         , object_{args...} {
     } catch (std::exception const& error) {
         // TODO

@@ -201,14 +201,15 @@ struct py_cast_t {
         return static_cast<copy_cv_t<From, To>*>(ptr);
     }
 
-    template <interaliasable_with<To> From>
+    template <pointer_interconvertible_with<To> From>
     LEV_HIDE_INSTANTIATION inline auto operator()(From* ptr) const noexcept {
         return reinterpret_cast<copy_cv_t<From, To>*>(ptr);
     }
 
     template <opaque_pyobj T>
-    requires requires(
-        T* ptr) { py_cast<To>(ptr)->std::same_as<copy_cv_t<T, To>*>; }
+    requires requires(T* ptr) {
+        { py_cast<To>(ptr) } -> std::same_as<copy_cv_t<T, To>*>;
+    }
     LEV_HIDE_INSTANTIATION inline constexpr auto operator()(
         T* ptr) const noexcept {
         return py_cast<To>(ptr);

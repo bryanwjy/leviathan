@@ -1,0 +1,823 @@
+// Copyright 2025, Bryan Wong
+
+#include "leviathan/adaptors/common.hpp"
+#include "leviathan/pointer.hpp"
+
+#include <array>
+#include <compare>
+#include <iterator>
+#include <ranges>
+#include <stdexcept>
+
+namespace lev {
+namespace py {
+
+template <typename... Ts>
+class tuple;
+template <typename... Ts>
+class tuple_view;
+template <typename T, size_t N = dynamic_extent>
+class array;
+template <typename T, size_t N = dynamic_extent>
+class array_view;
+
+namespace details::tuple {
+LEV_HIDDEN constexpr char const* null_instance_message_v =
+    "Tuple instance is null";
+LEV_HIDDEN constexpr char const* out_of_range_message_v =
+    "Tuple instance size is out of range of adaptor";
+LEV_HIDDEN constexpr char const* invalid_type_message_v =
+    "Tuple instance contains an unexpected element type]";
+
+std::span<PyObject* const> items(
+    unmanaged_ptr<PyTupleObject> tuple, size_t size) noexcept {
+    // In C++, performing index operations on ob_items for indices > 1 is UB
+    LEV_ASSERT(tuple);
+    LEV_ASSERT(size > 0);
+    // The following is a poor man's std::start_lifetime_as_array to "reboot"
+    // the lifetime of the array because PyTupleObject defines it as a
+    // PyObject*[1] member
+
+    // std::launder doesn't work here because we don't know the actual size of
+    // the array at compile time
+    PyObject** ptr = reinterpret_cast<PyObject**>(
+        memmove(ptr->ob_item, ptr->ob_item, size * sizeof(PyObject*)));
+
+    // See intro.object.12
+    // pointer arithmetic iteration forces creation of the array of the
+    // pyobjects since an array of pyobjects must exist for the for-loop
+    // to be defined behaviour
+    // This should get optimize out but is here to give the program defined
+    // behaviour
+    std::span<PyObject* const> span{ptr, ptr + size};
+    for (auto p : span) {
+        if (p) {
+            (void)*p;
+        }
+    }
+
+    return span;
+}
+
+template <typename... Ts>
+LEV_HIDE_INSTANTIATION static std::span<PyObject* const, sizeof...(Ts)>
+instance_to_span(unmanaged_ptr<PyTupleObject> ptr) {
+    using span_type = std::span<PyObject* const, sizeof...(Ts)>;
+    if (!ptr) {
+        failure<std::invalid_argument, PyExc_RuntimeError>(
+            details::tuple::null_instance_message_v);
+    }
+    static constexpr auto E = sizeof...(Ts);
+    auto const size = static_cast<size_t>(PyTuple_GET_SIZE(ptr));
+
+    if (size < E) {
+        failure<std::invalid_argument, PyExc_ValueError>(
+            details::tuple::out_of_range_message_v);
+    }
+
+    if constexpr (E == 0) {
+        if (size == 0) {
+            return span_type{static_cast<PyObject* const*>(ptr->ob_item), 0};
+        }
+    }
+
+    auto items = details::tuple::items(ptr, size);
+    auto const types_valid = [&]<size_t... Is>(std::index_sequence<Is...>) {
+        return (... && dynamic_ptr_cast<Ts>(items[Is]));
+    }(std::make_index_sequence<E>{});
+
+    if (types_valid) {
+        return span_type{items};
+    }
+
+    failure<std::invalid_argument, PyExc_TypeError>(
+        details::tuple::invalid_type_message_v);
+}
+
+template <typename T, size_t E>
+LEV_HIDE_INSTANTIATION static std::span<PyObject* const, E> instance_to_span(
+    unmanaged_ptr<PyTupleObject> ptr) {
+    using span_type = std::span<PyObject* const, E>;
+    if (!ptr) {
+        failure<std::invalid_argument, PyExc_RuntimeError>(
+            details::tuple::null_instance_message_v);
+    }
+
+    auto const size = static_cast<size_t>(PyTuple_GET_SIZE(ptr));
+    if constexpr (E != dynamic_extent) {
+        if (size < E) {
+            failure<std::invalid_argument, PyExc_ValueError>(
+                details::tuple::out_of_range_message_v);
+        }
+    }
+
+    if constexpr (E == 0 || E == dynamic_extent) {
+        if (size == 0) {
+            return span_type{static_cast<PyObject* const*>(ptr->ob_item), 0};
+        }
+    }
+
+    auto items = details::tuple::items(ptr, size);
+    if constexpr (E != dynamic_extent) {
+        auto const types_valid = [&]<size_t... Is>(std::index_sequence<Is...>) {
+            return (... && dynamic_ptr_cast<T>(items[Is]));
+        }(std::make_index_sequence<E>{});
+
+        if (types_valid) {
+            return span_type{items};
+        }
+    } else {
+        auto const types_valid = std::ranges::all_of(items,
+            [](PyObject* ptr) -> bool { return dynamic_ptr_cast<T>(ptr); });
+
+        if (types_valid) {
+            return span_type{items};
+        }
+    }
+
+    failure<std::invalid_argument, PyExc_TypeError>(
+        details::tuple::invalid_type_message_v);
+}
+
+template <pyobj_type T, typename Span>
+class transforming_iterator : typename Span::const_iterator {
+    using base_iterator = typename Span::const_iterator;
+
+public:
+    using value_type = unmanaged_ptr<T>;
+    using difference_type = ptrdiff_t;
+    using iterator_concept = std::random_access_iterator_tag;
+
+    using base_iterator::base_iterator;
+
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline auto
+    operator*() const noexcept {
+        return static_ptr_cast<T>(base_iterator::operator*());
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline auto operator[](
+        size_t idx) const noexcept {
+        return static_ptr_cast<T>(base_iterator::operator[](idx));
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator
+    operator+(difference_type offset) const noexcept {
+        return transforming_iterator{base_iterator::base() + offset};
+    }
+
+    LEV_HIDE_INSTANTIATION
+    [[nodiscard]] friend inline constexpr transforming_iterator operator+(
+        difference_type offset, transforming_iterator const& it) noexcept {
+        return transforming_iterator{it.base() + offset};
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator
+    operator-(difference_type offset) const noexcept {
+        return transforming_iterator{base_iterator::base() - offset};
+    }
+
+    LEV_HIDE_INSTANTIATION
+    [[nodiscard]] friend inline constexpr difference_type operator-(
+        transforming_iterator const& left,
+        transforming_iterator const& right) noexcept {
+        return static_cast<base_iterator const&>(left) -
+            static_cast<base_iterator const&>(right);
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator&
+    operator+=(difference_type offset) noexcept {
+        static_cast<base_iterator&>(*this) += offset;
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator&
+    operator-=(difference_type offset) noexcept {
+        static_cast<base_iterator&>(*this) -= offset;
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator&
+    operator++() noexcept {
+        ++static_cast<base_iterator&>(*this);
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator
+    operator++(int) noexcept {
+        transforming_iterator before = *this;
+        ++static_cast<base_iterator&>(*this);
+        return before;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator&
+    operator--() noexcept {
+        --static_cast<base_iterator&>(*this);
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator
+    operator--(int) noexcept {
+        transforming_iterator before = *this;
+        --static_cast<base_iterator&>(*this);
+        return before;
+    }
+};
+
+} // namespace details::tuple
+
+template <pyobj_type... Ts>
+class LEV_API tuple<Ts...> {
+    using span_type = std::span<PyObject* const, sizeof...(Ts)>;
+
+    template <typename...>
+    friend tuple;
+    template <typename, size_t>
+    friend array;
+
+public:
+    LEV_HIDE_INSTANTIATION constexpr inline tuple(
+        tuple const&) noexcept = default;
+    LEV_HIDE_INSTANTIATION [[clang::reinitializes]] constexpr inline tuple&
+    operator=(tuple const&) noexcept = default;
+    LEV_HIDE_INSTANTIATION constexpr inline tuple(tuple&&) noexcept = default;
+    LEV_HIDE_INSTANTIATION [[clang::reinitializes]] constexpr inline tuple&
+    operator=(tuple&&) noexcept = default;
+
+    LEV_HIDE_INSTANTIATION explicit inline tuple(
+        python_ptr<PyTupleObject>&& ptr)
+        : instance_{std::move(ptr)}
+        , span_{details::tuple::instance_to_span<Ts...>(instance_.get())} {}
+
+    LEV_HIDE_INSTANTIATION explicit inline tuple(
+        python_ptr<PyTupleObject> const& ptr)
+        : tuple(python_ptr<PyTupleObject>(ptr)) {}
+
+    template <pyobj_derived_from<PyTupleObject> U>
+    LEV_HIDE_INSTANTIATION explicit inline tuple(python_ptr<U>&& ptr)
+        : instance_{static_ptr_cast<PyTupleObject>(std::move(ptr))}
+        , span_{details::tuple::instance_to_span<Ts...>(instance_.get())} {}
+
+    template <pyobj_derived_from<PyTupleObject> U>
+    LEV_HIDE_INSTANTIATION explicit inline tuple(python_ptr<U> const& ptr)
+        : tuple(python_ptr<U>(ptr)) {}
+
+    template <pyobj_derived_from<Ts>... Us>
+    LEV_HIDE_INSTANTIATION explicit inline tuple(
+        adopt_t tag, tuple_view<Us...> other) noexcept
+        : instance_{tag, other.instance()}
+        , span_{other.span()} {}
+
+    template <pyobj_derived_from<Ts>... Us>
+    LEV_HIDE_INSTANTIATION inline tuple(tuple<Us...> const& other) noexcept
+        : instance_{other.instance()}
+        , span_{other.span()} {}
+
+    template <pyobj_derived_from<Ts>... Us>
+    LEV_HIDE_INSTANTIATION explicit(sizeof...(Vs) > 0) inline tuple(
+        tuple<Us...>&& other) noexcept
+        : instance_{std::move(other.instance_)}
+        , span_{other.span()} {}
+
+    LEV_HIDE_INSTANTIATION inline constexpr bool empty() const noexcept {
+        return sizeof...(Ts) == 0;
+    }
+
+    LEV_HIDE_INSTANTIATION inline constexpr size_t size() const noexcept {
+        return sizeof...(Ts);
+    }
+
+    LEV_HIDE_INSTANTIATION inline constexpr unmanaged_ptr<PyTupleObject>
+    instance() const noexcept LEV_LIFETIMEBOUND {
+        return instance_.get();
+    }
+
+    LEV_HIDE_INSTANTIATION inline span_type
+    span() const noexcept LEV_LIFETIMEBOUND {
+        return span_;
+    }
+
+    template <size_t I>
+    LEV_HIDE_INSTANTIATION
+        [[nodiscard]] friend unmanaged_ptr<tuple_element_t<I, typelist<Ts...>>>
+        get(tuple const& tuple) noexcept LEV_LIFETIMEBOUND {
+        using target_type = tuple_element_t<I, typelist<Ts...>>;
+        unmanaged_ptr<PyObject*> data(tuple.span_[I]);
+        return static_ptr_cast<target_type>(data);
+    }
+
+    template <typename U>
+    requires (1 == template_count_t<U, typelist<Ts...>>)
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend unmanaged_ptr<U> get(
+        tuple const& tuple) noexcept LEV_LIFETIMEBOUND {
+        unmanaged_ptr<PyObject*> data(
+            tuple.span_[template_index_v<U, typelist<Ts...>>]);
+        return static_ptr_cast<U>(data);
+    }
+
+private:
+    python_ptr<PyTupleObject> instance_;
+    span_type span_;
+};
+
+template <pyobj_type... Ts>
+class LEV_API tuple_view<Ts...> {
+    using span_type = std::span<PyObject* const, sizeof...(Ts)>;
+
+public:
+    LEV_HIDE_INSTANTIATION constexpr inline tuple_view(
+        tuple_view const&) noexcept = default;
+    LEV_HIDE_INSTANTIATION constexpr inline tuple_view& operator=(
+        tuple_view const&) noexcept = default;
+    LEV_HIDE_INSTANTIATION constexpr inline tuple_view(
+        tuple_view&&) noexcept = default;
+    LEV_HIDE_INSTANTIATION constexpr inline tuple_view& operator=(
+        tuple_view&&) noexcept = default;
+
+    LEV_HIDE_INSTANTIATION explicit inline tuple_view(
+        unmanaged_ptr<PyTupleObject> ptr)
+        : instance_{ptr}
+        , span_{details::tuple::instance_to_span<Ts...>(ptr)} {}
+
+    LEV_HIDE_INSTANTIATION explicit inline tuple_view(
+        python_ptr<PyTupleObject> const& ptr LEV_LIFETIMEBOUND)
+        : tuple_view{ptr.get()} {}
+
+    template <pyobj_derived_from<Ts>... Us>
+    LEV_HIDE_INSTANTIATION inline tuple_view(
+        tuple<Us...> const& other LEV_LIFETIMEBOUND) noexcept
+        : instance_{other.instance()}
+        , span_{other.span()} {}
+
+    template <pyobj_derived_from<Ts>... Us>
+    LEV_HIDE_INSTANTIATION inline tuple_view(tuple_view<Us...> other) noexcept
+        : instance_{other.instance()}
+        , span_{other.span()} {}
+
+    LEV_HIDE_INSTANTIATION inline unmanaged_ptr<PyTupleObject>
+    instance() const noexcept {
+        return instance_;
+    }
+
+    LEV_HIDE_INSTANTIATION inline constexpr bool empty() const noexcept {
+        return span_.empty();
+    }
+
+    LEV_HIDE_INSTANTIATION inline constexpr size_t size() const noexcept {
+        return span_.size();
+    }
+
+    LEV_HIDE_INSTANTIATION inline span_type
+    span() const noexcept LEV_LIFETIMEBOUND {
+        return span_;
+    }
+
+    template <size_t I>
+    LEV_HIDE_INSTANTIATION
+        [[nodiscard]] friend unmanaged_ptr<tuple_element_t<I, typelist<Ts...>>>
+        get(tuple const& tuple) noexcept LEV_LIFETIMEBOUND {
+        using target_type = tuple_element_t<I, typelist<Ts...>>;
+        unmanaged_ptr<PyObject*> data(tuple.span_[I]);
+        return static_ptr_cast<target_type>(data);
+    }
+
+    template <typename U>
+    requires (1 == template_count_t<U, typelist<Ts...>>)
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend unmanaged_ptr<U> get(
+        tuple const& tuple) noexcept LEV_LIFETIMEBOUND {
+        unmanaged_ptr<PyObject*> data(
+            tuple.span_[template_index_v<U, typelist<Ts...>>]);
+        return static_ptr_cast<U>();
+    }
+
+private:
+    unmanaged_ptr<PyTupleObject> instance_;
+    span_type span_;
+};
+
+template <pyobj_type T, size_t E>
+class LEV_API array {
+    using span_type = std::span<PyObject* const, E>;
+    template <typename T, size_t E>
+    friend array;
+
+public:
+    using value_type = unmanaged_ptr<T>;
+    using size_type = size_t;
+    using difference_type = ptrdiff_t;
+    using const_iterator =
+        typename details::tuple::transforming_iterator<T, span_type>;
+    using iterator = const_iterator;
+
+    LEV_HIDE_INSTANTIATION constexpr inline array(
+        array const&) noexcept = default;
+    LEV_HIDE_INSTANTIATION [[clang::reinitializes]] constexpr inline array&
+    operator=(array const&) noexcept = default;
+    LEV_HIDE_INSTANTIATION constexpr inline array(array&&) noexcept = default;
+    LEV_HIDE_INSTANTIATION [[clang::reinitializes]] constexpr inline array&
+    operator=(array&&) noexcept = default;
+
+    LEV_HIDE_INSTANTIATION explicit inline array(
+        python_ptr<PyTupleObject>&& ptr)
+        : instance_{std::move(ptr)}
+        , span_{details::tuple::instance_to_span<T, E>(instance_.get())} {}
+
+    LEV_HIDE_INSTANTIATION explicit inline array(
+        python_ptr<PyTupleObject> const& ptr)
+        : array(python_ptr<PyTupleObject>(ptr)) {}
+
+    template <pyobj_derived_from<T> U, size_t N>
+    requires (E != dynamic_extent && N == E)
+    LEV_HIDE_INSTANTIATION inline array(
+        adopt_t tag, array_view<U, N> other) noexcept
+        : instance_{tag, other.instance()}
+        , span_{other.span()} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T> U, size_t N>
+    requires (E != dynamic_extent && N == E)
+    LEV_HIDE_INSTANTIATION inline array(array<U, N> const& other) noexcept
+        : instance_{tag, other.instance()}
+        , span_{other.span()} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T> U, size_t N>
+    requires (E != dynamic_extent && N == E)
+    LEV_HIDE_INSTANTIATION inline array(array<U, N>&& other) noexcept
+        : instance_{tag, other.instance()}
+        , span_{other.span()} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T> U>
+    LEV_HIDE_INSTANTIATION explicit inline array(
+        adopt_t tag, array_view<U, dynamic_extent> other)
+    requires (E != dynamic_extent)
+        : instance_{tag, other.instance()}
+        , span_{other.size() >= E
+                  ? span_type{other.span().subspan(0, E)}
+                  : failure<std::invalid_argument, PyExc_ValueError>(
+                        details::tuple::out_of_range_message_v)} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T> U>
+    LEV_HIDE_INSTANTIATION explicit inline array(
+        array<U, dynamic_extent> const& other)
+    requires (E != dynamic_extent)
+        : instance_{other.instance_}
+        , span_{other.size() >= E
+                  ? span_type{other.span().subspan(0, E)}
+                  : failure<std::invalid_argument, PyExc_ValueError>(
+                        details::tuple::out_of_range_message_v)} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T> U>
+    LEV_HIDE_INSTANTIATION explicit inline array(
+        array<U, dynamic_extent>&& other)
+    requires (E != dynamic_extent)
+        : instance_{std::move(other.instance_)}
+        , span_{other.size() >= E
+                  ? span_type{other.span().subspan(0, E)}
+                  : failure<std::invalid_argument, PyExc_ValueError>(
+                        details::tuple::out_of_range_message_v)} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T>... Us>
+    requires (E != dynamic_extent && N >= E)
+    LEV_HIDE_INSTANTIATION explicit inline array(
+        adopt_t tag, tuple_view<Us...> other) noexcept
+        : instance_{tag, other.instance()}
+        , span_{other.span()} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T>... Us>
+    requires (E != dynamic_extent && sizeof...(Us) == E)
+    LEV_HIDE_INSTANTIATION explicit(sizeof...(Us) > E) inline array(
+        tuple<Us...> const& other) noexcept
+        : instance_{other.instance_}
+        , span_{other.span()} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T>... Us>
+    requires (E != dynamic_extent && sizeof...(Us) == E)
+    LEV_HIDE_INSTANTIATION explicit(sizeof...(Us) > E) inline array(
+        tuple<Us...>&& other) noexcept
+        : instance_{std::move(other.instance_)}
+        , span_{other.span()} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T> U, size_t N>
+    requires (E == dynamic_extent)
+    LEV_HIDE_INSTANTIATION explicit inline array(
+        adopt_t tag, array_view<U, N> other) noexcept
+        : instance_{tag, other.instance()}
+        , span_{other.span()} {
+        LEV_ASSERT(empty() || instance_);
+    }
+
+    template <pyobj_derived_from<T> U, size_t N>
+    requires (E == dynamic_extent)
+    LEV_HIDE_INSTANTIATION inline array(array<U, N> const& other) noexcept
+        : instance_{other.instance_}
+        , span_{other.span()} {
+        LEV_ASSERT(empty() || instance_);
+    }
+
+    template <pyobj_derived_from<T> U, size_t N>
+    requires (E == dynamic_extent)
+    LEV_HIDE_INSTANTIATION inline array(array<U, N>&& other) noexcept
+        : instance_{std::move(other.instance_)}
+        , span_{other.span()} {
+        LEV_ASSERT(empty() || instance_);
+    }
+
+    template <pyobj_derived_from<T>... Us>
+    requires (E == dynamic_extent)
+    LEV_HIDE_INSTANTIATION inline array(tuple<Us...> const& other) noexcept
+        : instance_{other.instance_}
+        , span_{other.span()} {
+        LEV_ASSERT(empty() || instance_);
+    }
+
+    template <pyobj_derived_from<T>... Us>
+    requires (E == dynamic_extent)
+    LEV_HIDE_INSTANTIATION inline array(tuple<Us...>&& other) noexcept
+        : instance_{std::move(other.instance_)}
+        , span_{other.span()} {
+        LEV_ASSERT(empty() || instance_);
+    }
+
+    template <pyobj_derived_from<T>... Us>
+    requires (E == dynamic_extent)
+    LEV_HIDE_INSTANTIATION explicit inline array(
+        adopt_t tag, tuple_view<Us...> other) noexcept
+        : instance_{tag, other.instance()}
+        , span_{other.span()} {
+        LEV_ASSERT(empty() || instance_);
+    }
+
+    LEV_HIDE_INSTANTIATION inline auto begin() const LEV_LIFETIMEBOUND {
+        return span_.begin();
+    }
+
+    LEV_HIDE_INSTANTIATION inline auto end() const LEV_LIFETIMEBOUND {
+        return span_.end();
+    }
+
+    LEV_HIDE_INSTANTIATION inline constexpr bool empty() const noexcept {
+        return span_.empty();
+    }
+
+    LEV_HIDE_INSTANTIATION inline constexpr size_t size() const noexcept {
+        return span_.size();
+    }
+
+    LEV_HIDE_INSTANTIATION inline constexpr unmanaged_ptr<PyTupleObject>
+    instance() const noexcept LEV_LIFETIMEBOUND {
+        return instance_.get();
+    }
+
+    LEV_HIDE_INSTANTIATION inline span_type
+    span() const noexcept LEV_LIFETIMEBOUND {
+        return span_;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] constexpr unmanaged_ptr<T> operator[](
+        size_t idx) const noexcept {
+        return static_ptr_cast<T>(span_[idx]);
+    }
+
+    template <size_t I>
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend unmanaged_ptr<T> get(
+        array const& array) noexcept LEV_LIFETIMEBOUND
+    requires (E != dynamic_extent)
+    {
+        return static_ptr_cast<T>(array.span_[I]);
+    }
+
+private:
+    python_ptr<PyTupleObject> instance_;
+    span_type span_;
+};
+
+template <pyobj_type T, size_t E>
+class LEV_API array_view {
+    using span_type = std::span<PyObject* const, E>;
+
+public:
+    using value_type = unmanaged_ptr<T>;
+    using size_type = size_t;
+    using difference_type = ptrdiff_t;
+    using const_iterator =
+        typename details::tuple::transforming_iterator<T, span_type>;
+    using iterator = const_iterator;
+
+    LEV_HIDE_INSTANTIATION constexpr inline array_view(
+        array_view const&) noexcept = default;
+    LEV_HIDE_INSTANTIATION constexpr inline array_view& operator=(
+        array_view const&) noexcept = default;
+    LEV_HIDE_INSTANTIATION constexpr inline array_view(
+        array_view&&) noexcept = default;
+    LEV_HIDE_INSTANTIATION constexpr inline array_view& operator=(
+        array_view&&) noexcept = default;
+
+    LEV_HIDE_INSTANTIATION explicit inline array_view(
+        python_ptr<PyTupleObject> const& ptr)
+        : instance_{ptr.get()}
+        , span_{details::tuple::instance_to_span<T, E>(instance_.get())} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T> U, size_t N>
+    requires (E != dynamic_extent && N == E)
+    LEV_HIDE_INSTANTIATION explicit inline array_view(
+        array_view<U, N> other) noexcept
+        : instance_{other.instance()}
+        , span_{other.span()} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T> U, size_t N>
+    requires (E != dynamic_extent && N == E)
+    LEV_HIDE_INSTANTIATION explicit inline array_view(
+        array<U, N> const& other LEV_LIFETIMEBOUND) noexcept
+        : instance_{other.instance()}
+        , span_{other.span()} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T>... Us>
+    requires (E != dynamic_extent && sizeof...(Us) == E)
+    LEV_HIDE_INSTANTIATION explicit inline array_view(
+        tuple<Us...> const& other LEV_LIFETIMEBOUND) noexcept
+        : instance_{other.instance()}
+        , span_{other.span()} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T>... Us>
+    requires (E != dynamic_extent && sizeof...(Us) == E)
+    LEV_HIDE_INSTANTIATION explicit inline array_view(
+        tuple_view<Us...> other) noexcept
+        : instance_{other.instance()}
+        , span_{other.span()} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T> U>
+    LEV_HIDE_INSTANTIATION explicit inline array_view(
+        array_view<U, dynamic_extent> other)
+    requires (E != dynamic_extent)
+        : instance_{other.instance()}
+        , span_{other.size() >= E
+                  ? span_type{other.span().subspan(0, E)}
+                  : failure<std::invalid_argument, PyExc_ValueError>(
+                        details::tuple::out_of_range_message_v)} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T> U>
+    LEV_HIDE_INSTANTIATION explicit inline array_view(
+        array<U, dynamic_extent> const& other LEV_LIFETIMEBOUND)
+    requires (E != dynamic_extent)
+        : instance_{other.instance()}
+        , span_{other.size() >= E
+                  ? span_type{other.span().subspan(0, E)}
+                  : failure<std::invalid_argument, PyExc_ValueError>(
+                        details::tuple::out_of_range_message_v)} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T> U, size_t N>
+    LEV_HIDE_INSTANTIATION inline array_view(array_view<U, N> other)
+    requires (E == dynamic_extent)
+        : instance_{other.instance()}
+        , span_{other.span()} {
+        LEV_ASSERT(instance_);
+    }
+
+    template <pyobj_derived_from<T> U, size_t N>
+    LEV_HIDE_INSTANTIATION inline array_view(
+        array<U, N> const& other LEV_LIFETIMEBOUND) noexcept
+    requires (E == dynamic_extent)
+        : instance_{other.instance()}
+        , span_{other.span()} {
+        LEV_ASSERT(empty() || instance_);
+    }
+
+    template <pyobj_derived_from<T>... Us>
+    LEV_HIDE_INSTANTIATION inline array_view(
+        tuple<Us...> const& other LEV_LIFETIMEBOUND) noexcept
+    requires (E == dynamic_extent)
+        : instance_{other.instance()}
+        , span_{other.span()} {
+        LEV_ASSERT(empty() || instance_);
+    }
+
+    template <pyobj_derived_from<T>... Us>
+    LEV_HIDE_INSTANTIATION inline array_view(tuple_view<Us...> other) noexcept
+    requires (E == dynamic_extent)
+        : instance_{other.instance()}
+        , span_{other.span()} {
+        LEV_ASSERT(empty() || instance_);
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline auto begin() const {
+        return span_.begin();
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline auto end() const {
+        return span_.end();
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr bool
+    empty() const noexcept {
+        return span_.empty();
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr size_t
+    size() const noexcept {
+        return span_.size();
+    }
+
+    LEV_HIDE_INSTANTIATION
+    [[nodiscard]] inline constexpr unmanaged_ptr<PyTupleObject>
+    instance() const noexcept {
+        return instance_.get();
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline span_type
+    span() const noexcept {
+        return span_;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] constexpr unmanaged_ptr<T> operator[](
+        size_t idx) const noexcept {
+        return static_ptr_cast<T>(span_[idx]);
+    }
+
+    template <size_t I>
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend unmanaged_ptr<T> get(
+        array_view const& view) noexcept
+    requires (E != dynamic_extent)
+    {
+        return static_ptr_cast<T>(view.span_[I]);
+    }
+
+private:
+    python_ptr<PyTupleObject> instance_;
+    span_type span_;
+};
+
+namespace views {
+template <pyobj_type... Ts>
+using tuple = tuple_view<Ts...>;
+template <pyobj_type T, size_t N = dynamic_extent>
+using array = array_view<T, N>;
+} // namespace views
+} // namespace py
+} // namespace lev
+
+template <lev::pyobj_type... Ts>
+struct std::tuple_size<lev::py::tuple<Ts...>> :
+    lev::size_constant<sizeof...(Ts)> {};
+template <lev::pyobj_type... Ts>
+struct std::tuple_size<lev::py::tuple_view<Ts...>> :
+    lev::size_constant<sizeof...(Ts)> {};
+
+template <lev::pyobj_type T, size_t N>
+requires (N != lev::dynamic_extent)
+struct std::tuple_size<lev::py::array<T, N>> : lev::size_constant<N> {};
+
+template <lev::pyobj_type T, size_t N>
+requires (N != lev::dynamic_extent)
+struct std::tuple_size<lev::py::array_view<T, N>> : lev::size_constant<N> {};
+
+template <size_t I, lev::pyobj_type... Ts>
+struct std::tuple_element<I, lev::py::tuple<Ts...>> {
+    using type = lev::template_element_t<I, lev::py::tuple<Ts...>>;
+};
+
+template <size_t I, lev::pyobj_type... Ts>
+struct std::tuple_element<I, lev::py::tuple_view<Ts...>> {
+    using type = lev::template_element_t<I, lev::py::tuple<Ts...>>;
+};
+
+template <size_t I, lev::pyobj_type T, size_t N>
+requires (N != lev::dynamic_extent)
+struct std::tuple_element<I, lev::py::array<T, N>> {
+    using type = unmanaged_ptr<T>;
+};
+
+template <lev::pyobj_type T, size_t N>
+requires (N != lev::dynamic_extent)
+struct std::tuple_element<I, lev::py::array_view<T, N>> {
+    using type = unmanaged_ptr<T>;
+};

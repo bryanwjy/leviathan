@@ -423,14 +423,14 @@ template <pyobj_type To, pyobj_type From>
 requires requires(unmanaged_ptr<From> ptr) { dynamic_ptr_cast<To>(ptr); }
 LEV_HIDDEN [[nodiscard]] inline details::cast_result_unmanaged_t<From, To>
 dynamic_ptr_cast(From* other) noexcept {
-    return dynamic_ptr_cast(unmanaged_ptr<From>(other));
+    return dynamic_ptr_cast<To>(unmanaged_ptr<From>(other));
 }
 
 template <pyobj_type To, pyobj_type From>
 requires requires(unmanaged_ptr<From> ptr) { exact_ptr_cast<To>(ptr); }
 LEV_HIDDEN [[nodiscard]] inline details::cast_result_unmanaged_t<From, To>
 exact_ptr_cast(From* other) noexcept {
-    return exact_ptr_cast(unmanaged_ptr<From>(other));
+    return exact_ptr_cast<To>(unmanaged_ptr<From>(other));
 }
 
 template <pyobj_type To, pyobj_type From>

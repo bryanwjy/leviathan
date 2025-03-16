@@ -20,14 +20,20 @@ template <typename T, size_t N = dynamic_extent>
 class array;
 template <typename T, size_t N = dynamic_extent>
 class array_view;
+namespace views {
+template <pyobj_type... Ts>
+using tuple = tuple_view<Ts...>;
+template <pyobj_type T, size_t N = dynamic_extent>
+using array = array_view<T, N>;
+} // namespace views
 
 namespace details::tuple {
 LEV_HIDDEN constexpr char const* null_instance_message_v =
     "Tuple instance is null";
-LEV_HIDDEN constexpr char const* out_of_range_message_v =
-    "Tuple instance size is out of range of adaptor";
+LEV_HIDDEN constexpr char const* size_mismatch_message_v =
+    "Tuple-Adaptor size mismatch";
 LEV_HIDDEN constexpr char const* invalid_type_message_v =
-    "Tuple instance contains an unexpected element type]";
+    "Tuple-Adaptor element type mismatch";
 
 std::span<PyObject* const> items(
     unmanaged_ptr<PyTupleObject> tuple, size_t size) noexcept {
@@ -38,8 +44,8 @@ std::span<PyObject* const> items(
     // the lifetime of the array because PyTupleObject defines it as a
     // PyObject*[1] member
 
-    // std::launder doesn't work here because we don't know the actual size of
-    // the array at compile time
+    // Unsure: std::launder doesn't work here since the array is a subobject of
+    // PyTupleObject
     PyObject** ptr = reinterpret_cast<PyObject**>(
         memmove(ptr->ob_item, ptr->ob_item, size * sizeof(PyObject*)));
 
@@ -47,9 +53,9 @@ std::span<PyObject* const> items(
     // pointer arithmetic iteration forces creation of the array of the
     // pyobjects since an array of pyobjects must exist for the for-loop
     // to be defined behaviour
+    std::span<PyObject* const> span{ptr, ptr + size};
     // This should get optimize out but is here to give the program defined
     // behaviour
-    std::span<PyObject* const> span{ptr, ptr + size};
     for (auto p : span) {
         if (p) {
             (void)*p;
@@ -63,16 +69,19 @@ template <typename... Ts>
 LEV_HIDE_INSTANTIATION static std::span<PyObject* const, sizeof...(Ts)>
 instance_to_span(unmanaged_ptr<PyTupleObject> ptr) {
     using span_type = std::span<PyObject* const, sizeof...(Ts)>;
-    if (!ptr) {
-        failure<std::invalid_argument, PyExc_RuntimeError>(
-            details::tuple::null_instance_message_v);
-    }
     static constexpr auto E = sizeof...(Ts);
-    auto const size = static_cast<size_t>(PyTuple_GET_SIZE(ptr));
 
-    if (size < E) {
+    if constexpr (E > 0) {
+        if (!ptr) {
+            failure<std::invalid_argument, PyExc_RuntimeError>(
+                details::tuple::null_instance_message_v);
+        }
+    }
+
+    auto const size = ptr ? static_cast<size_t>(PyTuple_GET_SIZE(ptr)) : 0;
+    if (size != E) {
         failure<std::invalid_argument, PyExc_ValueError>(
-            details::tuple::out_of_range_message_v);
+            details::tuple::size_mismatch_message_v);
     }
 
     if constexpr (E == 0) {
@@ -90,7 +99,7 @@ instance_to_span(unmanaged_ptr<PyTupleObject> ptr) {
         return span_type{items};
     }
 
-    failure<std::invalid_argument, PyExc_TypeError>(
+    failure<type_error, PyExc_TypeError>(
         details::tuple::invalid_type_message_v);
 }
 
@@ -98,16 +107,18 @@ template <typename T, size_t E>
 LEV_HIDE_INSTANTIATION static std::span<PyObject* const, E> instance_to_span(
     unmanaged_ptr<PyTupleObject> ptr) {
     using span_type = std::span<PyObject* const, E>;
-    if (!ptr) {
-        failure<std::invalid_argument, PyExc_RuntimeError>(
-            details::tuple::null_instance_message_v);
+    if constexpr (E > 0) {
+        if (!ptr) {
+            failure<std::invalid_argument, PyExc_RuntimeError>(
+                details::tuple::null_instance_message_v);
+        }
     }
 
-    auto const size = static_cast<size_t>(PyTuple_GET_SIZE(ptr));
+    auto const size = ptr ? static_cast<size_t>(PyTuple_GET_SIZE(ptr)) : 0;
     if constexpr (E != dynamic_extent) {
-        if (size < E) {
+        if (size != E) {
             failure<std::invalid_argument, PyExc_ValueError>(
-                details::tuple::out_of_range_message_v);
+                details::tuple::size_mismatch_message_v);
         }
     }
 
@@ -135,7 +146,7 @@ LEV_HIDE_INSTANTIATION static std::span<PyObject* const, E> instance_to_span(
         }
     }
 
-    failure<std::invalid_argument, PyExc_TypeError>(
+    failure<type_error, PyExc_TypeError>(
         details::tuple::invalid_type_message_v);
 }
 
@@ -455,10 +466,10 @@ public:
         adopt_t tag, array_view<U, dynamic_extent> other)
     requires (E != dynamic_extent)
         : instance_{tag, other.instance()}
-        , span_{other.size() >= E
-                  ? span_type{other.span().subspan(0, E)}
+        , span_{other.size() == E
+                  ? span_type{other.span()}
                   : failure<std::invalid_argument, PyExc_ValueError>(
-                        details::tuple::out_of_range_message_v)} {
+                        details::tuple::size_mismatch_message_v)} {
         LEV_ASSERT(instance_);
     }
 
@@ -467,10 +478,10 @@ public:
         array<U, dynamic_extent> const& other)
     requires (E != dynamic_extent)
         : instance_{other.instance_}
-        , span_{other.size() >= E
-                  ? span_type{other.span().subspan(0, E)}
+        , span_{other.size() == E
+                  ? span_type{other.span()}
                   : failure<std::invalid_argument, PyExc_ValueError>(
-                        details::tuple::out_of_range_message_v)} {
+                        details::tuple::size_mismatch_message_v)} {
         LEV_ASSERT(instance_);
     }
 
@@ -479,15 +490,15 @@ public:
         array<U, dynamic_extent>&& other)
     requires (E != dynamic_extent)
         : instance_{std::move(other.instance_)}
-        , span_{other.size() >= E
-                  ? span_type{other.span().subspan(0, E)}
+        , span_{other.size() == E
+                  ? span_type{other.span()}
                   : failure<std::invalid_argument, PyExc_ValueError>(
-                        details::tuple::out_of_range_message_v)} {
+                        details::tuple::size_mismatch_message_v)} {
         LEV_ASSERT(instance_);
     }
 
     template <pyobj_derived_from<T>... Us>
-    requires (E != dynamic_extent && N >= E)
+    requires (E != dynamic_extent && sizeof...(Us) == E)
     LEV_HIDE_INSTANTIATION explicit inline array(
         adopt_t tag, tuple_view<Us...> other) noexcept
         : instance_{tag, other.instance()}
@@ -497,8 +508,7 @@ public:
 
     template <pyobj_derived_from<T>... Us>
     requires (E != dynamic_extent && sizeof...(Us) == E)
-    LEV_HIDE_INSTANTIATION explicit(sizeof...(Us) > E) inline array(
-        tuple<Us...> const& other) noexcept
+    LEV_HIDE_INSTANTIATION inline array(tuple<Us...> const& other) noexcept
         : instance_{other.instance_}
         , span_{other.span()} {
         LEV_ASSERT(instance_);
@@ -506,8 +516,7 @@ public:
 
     template <pyobj_derived_from<T>... Us>
     requires (E != dynamic_extent && sizeof...(Us) == E)
-    LEV_HIDE_INSTANTIATION explicit(sizeof...(Us) > E) inline array(
-        tuple<Us...>&& other) noexcept
+    LEV_HIDE_INSTANTIATION inline array(tuple<Us...>&& other) noexcept
         : instance_{std::move(other.instance_)}
         , span_{other.span()} {
         LEV_ASSERT(instance_);
@@ -676,10 +685,10 @@ public:
         array_view<U, dynamic_extent> other)
     requires (E != dynamic_extent)
         : instance_{other.instance()}
-        , span_{other.size() >= E
-                  ? span_type{other.span().subspan(0, E)}
+        , span_{other.size() == E
+                  ? span_type{other.span()}
                   : failure<std::invalid_argument, PyExc_ValueError>(
-                        details::tuple::out_of_range_message_v)} {
+                        details::tuple::size_mismatch_message_v)} {
         LEV_ASSERT(instance_);
     }
 
@@ -688,10 +697,10 @@ public:
         array<U, dynamic_extent> const& other LEV_LIFETIMEBOUND)
     requires (E != dynamic_extent)
         : instance_{other.instance()}
-        , span_{other.size() >= E
-                  ? span_type{other.span().subspan(0, E)}
+        , span_{other.size() == E
+                  ? span_type{other.span()}
                   : failure<std::invalid_argument, PyExc_ValueError>(
-                        details::tuple::out_of_range_message_v)} {
+                        details::tuple::size_mismatch_message_v)} {
         LEV_ASSERT(instance_);
     }
 
@@ -775,13 +784,6 @@ private:
     python_ptr<PyTupleObject> instance_;
     span_type span_;
 };
-
-namespace views {
-template <pyobj_type... Ts>
-using tuple = tuple_view<Ts...>;
-template <pyobj_type T, size_t N = dynamic_extent>
-using array = array_view<T, N>;
-} // namespace views
 } // namespace py
 } // namespace lev
 

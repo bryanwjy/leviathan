@@ -184,25 +184,26 @@ struct py_cast_t {
 
     template <typename From>
     requires std::same_as<remove_cv_t<To>, remove_cv_t<From>>
-    LEV_HIDE_INSTANTIATION inline constexpr auto operator()(
-        From* ptr) const noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::const]] inline constexpr auto
+    operator()(From* ptr) const noexcept {
         return static_cast<copy_cv_t<From, To>*>(ptr);
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr auto operator()(
-        decltype(nullptr) ptr) const noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::const]] inline constexpr auto
+    operator()(decltype(nullptr) ptr) const noexcept {
         return static_cast<To*>(ptr);
     }
 
     template <leviathan_pyobj From>
     requires requires(From* ptr) { static_cast<copy_cv_t<From, To>*>(ptr); }
-    LEV_HIDE_INSTANTIATION inline constexpr auto operator()(
-        From* ptr) const noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::const]] inline constexpr auto
+    operator()(From* ptr) const noexcept {
         return static_cast<copy_cv_t<From, To>*>(ptr);
     }
 
     template <pointer_interconvertible_with<To> From>
-    LEV_HIDE_INSTANTIATION inline auto operator()(From* ptr) const noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::const]] inline auto operator()(
+        From* ptr) const noexcept {
         return reinterpret_cast<copy_cv_t<From, To>*>(ptr);
     }
 
@@ -254,6 +255,35 @@ LEV_HIDDEN std::strign_view to_string_view(
     Py_ssize_t size = 0;
     auto str = PyUnicode_AsUTF8AndSize(ptr, &size);
     return std::string_view{str, static_cast<size_t>(size)};
+}
+
+template <size_t N>
+struct format_cstring_t {
+    template <size_t L, typename... Args>
+    explicit format_cstring_t(char const (&fmt)[L], Args... args) noexcept
+        : format_cstring_t(static_cast<char const*>(fmt), args...) {}
+
+    char const* data() const noexcept LEV_LIFETIMEBOUND {
+        return static_cast<char const*>(buffer);
+    }
+
+private:
+    explicit format_cstring_t(char const* fmt, ...) noexcept {
+        va_list args1;
+        va_start(args, fmt);
+        auto str_size = vsnprintf(buffer, N, fmt, args);
+        va_end(args);
+        LEV_ASSERT(str_size + 1 <= N);
+        buffer[N - 1] = 0;
+    }
+
+    char buffer[N];
+};
+
+template <size_t N = 128, size_t L, typename... Args>
+LEV_HIDE_INSTANTIATION [[nodiscard]] format_cstring_t<N> format_cstring(
+    char const (&fmt)[L], Args... args) noexcept {
+    return format_cstring_t<N>{fmt, args...};
 }
 
 } // namespace lev

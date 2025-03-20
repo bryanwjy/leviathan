@@ -11,32 +11,32 @@
 
 namespace lev {
 
-template <typename AdaptorType>
+template <typename Adaptor>
 LEV_HIDDEN inline constexpr type_flags type_flags_v = []() {
     static_assert(
-        basic_instantiable<AdaptorType> || vectorcall_instantiable<AdaptorType>,
+        basic_instantiable<Adaptor> || vectorcall_instantiable<Adaptor>,
         "Undefined type flags");
     return type_flags::default_values | type_flags::immutable_type;
 }();
 
-template <uninstantiable AdaptorType>
-LEV_HIDDEN inline constexpr type_flags type_flags_v<AdaptorType> =
+template <uninstantiable Adaptor>
+LEV_HIDDEN inline constexpr type_flags type_flags_v<Adaptor> =
     type_flags::default_values | type_flags::immutable_type |
     type_flags::disallow_instantiation;
 
 // C++ classes (exlcuding fundamental types) must have an adaptor
 // All adaptors are leviathan pyobjects (or opaque objects)
-template <typename AdaptorType>
+template <typename Adaptor>
 struct adaptor_traits;
 
 namespace details {
 
-template <basic_instantiable AdaptorType>
+template <basic_instantiable Adaptor>
 LEV_HIDDEN [[nodiscard]] void* default_allocate(
     PyTypeObject* type, Py_ssize_t) noexcept {
     // The size parameter is unused; leviathan does not implement VarObj
     // (intrusive array types) by default.
-    auto ptr = new (std::nothrow) AdaptorType{};
+    auto ptr = new (std::nothrow) Adaptor{};
     if (!ptr) {
         return PyErr_NoMemory();
     }
@@ -44,7 +44,7 @@ LEV_HIDDEN [[nodiscard]] void* default_allocate(
     return ptr;
 }
 
-template <typename AdaptorType>
+template <typename Adaptor>
 LEV_HIDDEN [[nodiscard]] PyObject* default_new(
     PyTypeObject* type, PyObject*, PyObject*) noexcept {
     return type->tp_alloc(type, 0);
@@ -55,23 +55,22 @@ LEV_HIDDEN inline void default_deallocate(PyObject* self) noexcept {
     type->tp_free(self);
 }
 
-template <typename AdaptorType>
+template <typename Adaptor>
 LEV_HIDDEN void default_free(void* ptr) noexcept {
     delete ptr;
 }
 
 template <typename Adaptor, typename = typename Adaptor::instantiation_concept>
 LEV_HIDDEN inline constexpr allocfunc select_allocator = nullptr;
-template <typename AdaptorType>
+template <typename Adaptor>
 LEV_HIDDEN inline constexpr allocfunc
-    select_allocator<AdaptorType, basic_instantiation> =
-        &default_allocate<AdaptorType>;
+    select_allocator<Adaptor, basic_instantiation> = &default_allocate<Adaptor>;
 
 template <typename Adaptor, typename = typename Adaptor::instantiation_concept>
 LEV_HIDDEN inline constexpr newfunc select_new = nullptr;
-template <typename AdaptorType>
-LEV_HIDDEN inline constexpr newfunc
-    select_new<AdaptorType, basic_instantiation> = &default_new;
+template <typename Adaptor>
+LEV_HIDDEN inline constexpr newfunc select_new<Adaptor, basic_instantiation> =
+    &default_new;
 
 LEV_HIDDEN inline constexpr PyMethodDef empty_method_table[1] = {{}};
 
@@ -81,16 +80,16 @@ template <typename Adaptor>
 LEV_HIDDEN inline constexpr initproc select_initialize = nullptr;
 
 template <basic_instantiable Adaptor>
-requires requires(Adaptor* ptr, initializer_arguments_t<AdaptorType> tuple) {
-    typename initializer_arguments_t<AdaptorType>;
-    requires !std::is_void_v<initializer_arguments_t<AdaptorType>>;
+requires requires(Adaptor* ptr, initializer_arguments_t<Adaptor> tuple) {
+    typename initializer_arguments_t<Adaptor>;
+    requires !std::is_void_v<initializer_arguments_t<Adaptor>>;
     {
-        initialize<AdaptorType>(ptr, std::move(tuple))
+        initialize<Adaptor>(ptr, std::move(tuple))
     } noexcept -> std::same_as<result_code>;
 }
-LEV_HIDDEN inline constexpr initproc select_initialize =
+LEV_HIDDEN inline constexpr initproc select_initialize<Adaptor> =
     [](PyObject* self, PyObject* args, PyObject* kwargs) noexcept -> int {
-        initializer_arguments_t<AdaptorType> tuple;
+        initializer_arguments_t<Adaptor> tuple;
         auto arg_span = to_span(py_cast<PyTupleObject>(args));
         auto kw = py_cast<PyDictObject>(kwargs);
 
@@ -109,7 +108,7 @@ requires requires(Adaptor* self) {
         initialize<AdaptAdaptororType>(self)
     } noexcept -> std::same_as<result_code>;
 }
-LEV_HIDDEN inline constexpr initproc select_initialize =
+LEV_HIDDEN inline constexpr initproc select_initialize<Adaptor> =
     [](PyObject* self, PyObject* args, PyObject* kwargs) noexcept -> int {
         auto kw = py_cast<PyDictObject>(kwargs);
         if (auto arg_span = to_span(py_cast<PyTupleObject>(args));
@@ -130,66 +129,66 @@ template <typename Adaptor>
 LEV_HIDDEN inline constexpr vectorcallfunc select_vectorcall_initialize =
     nullptr;
 
-template <vectorcall_instantiable AdaptorType>
+template <vectorcall_instantiable Adaptor>
 requires requires {
-    typename initializer_arguments_t<AdaptorType>;
-    requires !std::is_void_v<initializer_arguments_t<AdaptorType>>;
-} && requires(initializer_arguments_t<AdaptorType> tuple) {
+    typename initializer_arguments_t<Adaptor>;
+    requires !std::is_void_v<initializer_arguments_t<Adaptor>>;
+} && requires(initializer_arguments_t<Adaptor> tuple) {
     {
-        initialize<AdaptorType>(std::move(tuple))
-    } noexcept -> std::same_as<python_ptr<AdaptorType>>;
+        initialize<Adaptor>(std::move(tuple))
+    } noexcept -> std::same_as<python_ptr<Adaptor>>;
 }
-LEV_HIDDEN inline constexpr vectorcallfunc select_vectorcall_initialize =
-    [](PyObject*, PyObject* const* args, Py_ssize_t nargsf,
-        PyObject* kwnames) noexcept -> PyObject* {
-        auto const nargs = static_cast<size_t>(PyVectorcall_NARGS(nargsf));
+LEV_HIDDEN inline constexpr vectorcallfunc
+    select_vectorcall_initialize<Adaptor> =
+        [](PyObject*, PyObject* const* args, Py_ssize_t nargsf,
+            PyObject* kwnames) noexcept -> PyObject* {
+            auto const nargs = static_cast<size_t>(PyVectorcall_NARGS(nargsf));
 
-        auto const arg_span = std::span{args, nargs};
-        auto const kwspan = to_span(py_cast<PyTupleObject>(kwnames));
-        initializer_arguments_t<AdaptorType> tuple;
-        if (argument::populate(arg_span, kwspan, tuple) !=
-            result_code::success) {
-            return nullptr;
-        }
+            auto const arg_span = std::span{args, nargs};
+            auto const kwspan = to_span(py_cast<PyTupleObject>(kwnames));
+            initializer_arguments_t<Adaptor> tuple;
+            if (argument::populate(arg_span, kwspan, tuple) !=
+                result_code::success) {
+                return nullptr;
+            }
 
-        return initialize<AdaptorType>(std::move(tuple)).release();
-    };
+            return initialize<Adaptor>(std::move(tuple)).release();
+        };
 
-template <vectorcall_instantiable AdaptorType>
+template <vectorcall_instantiable Adaptor>
 requires requires {
-    typename initializer_arguments_t<AdaptorType>;
-    requires std::is_void_v<initializer_arguments_t<AdaptorType>>;
-    {
-        initialize<AdaptorType>()
-    } noexcept -> std::same_as<python_ptr<AdaptorType>>;
+    typename initializer_arguments_t<Adaptor>;
+    requires std::is_void_v<initializer_arguments_t<Adaptor>>;
+    { initialize<Adaptor>() } noexcept -> std::same_as<python_ptr<Adaptor>>;
 }
-LEV_HIDDEN inline constexpr vectorcallfunc select_vectorcall_initialize =
-    [](PyObject*, PyObject* const* args, Py_ssize_t nargsf,
-        PyObject* kwnames) noexcept -> PyObject* {
-        auto const nargs = static_cast<size_t>(PyVectorcall_NARGS(nargsf));
-        if (auto names = to_span(py_cast<PyTupleObject>(kwnames));
-            nargs > 0 || !names.empty()) {
-            auto const size = nargs + names.size();
-            PyErr_Format(PyExc_ValueError,
-                "Invocation failed, Reason=[Unexpected argument count], "
-                "Expected=[0], Received=[%zu]",
-                size);
-            return result_code::failed;
-        }
+LEV_HIDDEN inline constexpr vectorcallfunc
+    select_vectorcall_initialize<Adaptor> =
+        [](PyObject*, PyObject* const* args, Py_ssize_t nargsf,
+            PyObject* kwnames) noexcept -> PyObject* {
+            auto const nargs = static_cast<size_t>(PyVectorcall_NARGS(nargsf));
+            if (auto names = to_span(py_cast<PyTupleObject>(kwnames));
+                nargs > 0 || !names.empty()) {
+                auto const size = nargs + names.size();
+                PyErr_Format(PyExc_ValueError,
+                    "Invocation failed, Reason=[Unexpected argument count], "
+                    "Expected=[0], Received=[%zu]",
+                    size);
+                return result_code::failed;
+            }
 
-        return initialize<AdaptorType>().release();
-    };
+            return initialize<Adaptor>().release();
+        };
 
 template <typename Adaptor>
 LEV_HIDDEN inline constexpr getattrofunc select_get_attribute = nullptr;
 
 template <typename Adaptor>
-requires requires(AdaptorType const& obj, python_ptr<PyObject> key) {
+requires requires(Adaptor const& obj, python_ptr<PyObject> key) {
     {
         obj.get_attribute(std::move(key)) noexcept
     } -> std::same_as<python_ptr<PyObject>>;
 }
-LEV_HIDDEN inline constexpr getattrofunc select_get_attribute =
+LEV_HIDDEN inline constexpr getattrofunc select_get_attribute<Adaptor> =
     [](PyObject* obj, PyObject* key) -> PyObject* {
         return py_cast<Adaptor>(obj)
             ->get_attribute(python_ptr{retain_object, key})
@@ -200,13 +199,13 @@ template <typename Adaptor>
 LEV_HIDDEN inline constexpr setattrofunc select_set_attribute = nullptr;
 
 template <typename Adaptor>
-requires requires(AdaptorType& obj, PyObject* key, python_ptr<PyObject> value) {
+requires requires(Adaptor& obj, PyObject* key, python_ptr<PyObject> value) {
     {
         obj.set_attribute(key, std::move(value))
     } noexcept -> std::same_as<result_code>;
     { obj.remove_attribute(key) } noexcept -> std::same_as<result_code>;
 }
-LEV_HIDDEN inline constexpr setattrofunc select_set_attribute =
+LEV_HIDDEN inline constexpr setattrofunc select_set_attribute<Adaptor> =
     [](PyObject* obj, PyObject* key, PyObject* value) -> int {
         if (value) {
             return py_cast<Adaptor>(obj)->set_attribute(key,
@@ -215,20 +214,50 @@ LEV_HIDDEN inline constexpr setattrofunc select_set_attribute =
             return py_cast<Adaptor>(obj)->remove_attribute(key);
         }
     };
+
+template <typename Adaptor>
+concept hashable_adaptor =
+    requires {
+        requires leviathan_pyobj<Adaptor>;
+        typename Adaptor::element_type;
+        requires std::convertible_to<Adaptor const&,
+            typename Adaptor::element_type const&>;
+    } &&
+    requires(
+        std::hash<typename Adaptor::element_type> hash, Adaptor const& val) {
+        {
+            hash(static_cast<typename Adaptor::element_type const&>(val))
+        } -> std::convertible_to<size_t>;
+    };
+
+template <typename Adaptor>
+LEV_HIDDEN inline constexpr hashfunc select_hash_function = nullptr;
+template <hashable_adaptor Adaptor>
+LEV_HIDDEN inline constexpr hashfunc select_hash_function<Adaptor> =
+    [](PyObject* obj) -> Py_hash_t {
+    static constexpr std::hash<typename Adaptor::element_type> hasher;
+    using element_type = typename Adaptor::element_type;
+    auto adaptor = py_cast<Adaptor>(obj);
+    return adaptor ? static_cast<Py_hash_t>(
+                         hasher(static_cast<element_type const&>(*adaptor)))
+                   : -1;
+};
+
 } // namespace details
 
-template <leviathan_pyobj AdaptorType>
-struct LEV_API adaptor_traits<AdaptorType> {
-    using element_type = typename AdaptorType::element_type;
-    using instantiation_concept = typename AdaptorType::instantiation_concept;
+template <leviathan_pyobj Adaptor>
+struct LEV_API adaptor_traits<Adaptor> {
+    using element_type = typename Adaptor::element_type;
+    using instantiation_concept = typename Adaptor::instantiation_concept;
+    using hashable = bool_constant<select_hash_function<Adaptor> != nullptr>;
 
     template <typename... Args>
-    requires std::is_constructible_v<AdaptorType, Args...>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] static python_ptr<AdaptorType> Create(
+    requires std::is_constructible_v<Adaptor, Args...>
+    LEV_HIDE_INSTANTIATION [[nodiscard]] static python_ptr<Adaptor> Create(
         Args&&... args) noexcept {
         LEV_TRY {
             return python_ptr{
-                retain_object, new AdaptorType{std::forward<Args>(args)...}};
+                retain_object, new Adaptor{std::forward<Args>(args)...}};
         } LEV_CATCH(std::exception const& error) {
             PyErr_Format(PyExc_TypeError,
                 "Internal initialization failed for object '%s', "
@@ -248,19 +277,19 @@ struct LEV_API adaptor_traits<AdaptorType> {
     type_name() noexcept {
         static_assert(
             requires {
-                { AdaptorType::type_name() } -> std::same_as<char const*>;
+                { Adaptor::type_name() } -> std::same_as<char const*>;
             }, "Adaptors must be named");
-        return AdaptorType::type_name();
+        return Adaptor::type_name();
     }
 
     LEV_HIDE_INSTANTIATION [[nodiscard]] static constexpr PyMethodDef*
     method_descriptors() noexcept {
         if constexpr (requires {
                           {
-                              AdaptorType::method_descriptors()
+                              Adaptor::method_descriptors()
                           } -> std::same_as<PyMethodDef*>;
                       }) {
-            return AdaptorType::method_descriptors();
+            return Adaptor::method_descriptors();
         } else {
             return details::empty_method_table;
         }
@@ -270,12 +299,12 @@ struct LEV_API adaptor_traits<AdaptorType> {
     member_descriptors() noexcept {
         if constexpr (requires {
                           {
-                              AdaptorType::member_descriptors()
+                              Adaptor::member_descriptors()
                           } -> std::same_as<PyMemberDef*>;
                       }) {
-            static_assert(std::is_standard_layout_v<AdaptorType>,
+            static_assert(std::is_standard_layout_v<Adaptor>,
                 "Types with python members must be standard_layout");
-            return AdaptorType::member_descriptors();
+            return Adaptor::member_descriptors();
         } else {
             return nullptr;
         }
@@ -283,9 +312,9 @@ struct LEV_API adaptor_traits<AdaptorType> {
 
     LEV_HIDE_INSTANTIATION [[nodiscard]] static constexpr PyTypeObject*
     type_object() noexcept requires {
-        { AdaptorType::type_object() } noexcept -> std::same_as<PyTypeObject*>;
+        { Adaptor::type_object() } noexcept -> std::same_as<PyTypeObject*>;
     } {
-        return AdaptorType::type_object();
+        return Adaptor::type_object();
     }
 
     LEV_HIDE_INSTANTIATION [[nodiscard]] static PyTypeObject*
@@ -293,20 +322,20 @@ struct LEV_API adaptor_traits<AdaptorType> {
         static PyTypeObject type_obj = {
             .ob_base = PyVarObject_HEAD_INIT(NULL, 0)
             .tp_name = type_name(),
-            .tp_basicsize = sizeof(AdaptorType),
+            .tp_basicsize = sizeof(Adaptor),
             .tp_dealloc = &details::default_deallocate,
-            .tp_getattro = details::select_get_attribute<AdaptorType>,
-            .tp_setattro = details::select_set_attribute<AdaptorType>,
-            .tp_flags = type_flags_v<AdaptorType>,
+            .tp_getattro = details::select_get_attribute<Adaptor>,
+            .tp_setattro = details::select_set_attribute<Adaptor>,
+            .tp_hash = details::select_hash_function<Adaptor>,
+            .tp_flags = type_flags_v<Adaptor>,
             .tp_doc = type_documentation(),
             .tp_methods = method_descriptors(),
             .tp_members = member_descriptors(),
-            .tp_init = details::select_initialize<AdaptorType>,
-            .tp_alloc = details::select_allocator<AdaptorType>,
-            .tp_new = details::select_new<AdaptorType>,
+            .tp_init = details::select_initialize<Adaptor>,
+            .tp_alloc = details::select_allocator<Adaptor>,
+            .tp_new = details::select_new<Adaptor>,
             .tp_free = &details::default_free,
-            .tp_vectorcall =
-                details::select_vectorcall_initialize<AdaptorType>
+            .tp_vectorcall = details::select_vectorcall_initialize<Adaptor>
         };
         return &type_obj;
     }
@@ -320,10 +349,10 @@ struct LEV_API adaptor_traits<AdaptorType> {
     type_documentation() noexcept {
         if constexpr (requires {
                           {
-                              AdaptorType::type_documentation()
+                              Adaptor::type_documentation()
                           } -> std::same_as<char const*>;
                       }) {
-            return AdaptorType::type_documentation();
+            return Adaptor::type_documentation();
         } else {
             return "Undocumented type";
         }

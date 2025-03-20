@@ -22,33 +22,61 @@ protected:
     LEV_HIDDEN inline constexpr ~object_root() noexcept = default;
 };
 
-template <typename T, typename Instantiator = vector_instantiation>
+template <typename D, typename T, typename Instantiator = vector_instantiation>
 class LEV_API basic_object;
 
-template <typename T>
-class LEV_API basic_object<T, basic_instantiation> : public object_root {
+template <typename D, typename T>
+class LEV_API basic_object<D, T, basic_instantiation> : public object_root {
+    using traits = adaptor_traits<D>;
+
 public:
+    using type = D;
+    using element_type = T;
     using instantiation_concept = basic_instantiation;
 
     LEV_HIDE_INSTANTIATION inline basic_object() noexcept
-        : object_root{adaptor_traits<T>::type_object()} {}
+        : object_root{traits::type_object()} {
+        static_assert(std::is_base_of_v<basic_object, D>);
+    }
+
+    template <typename... Args>
+    requires std::constructible_from<T, Args...> &&
+                 std::is_nothrow_constructible_v<T, Args...>
+    LEV_HIDE_INSTANTIATION explicit(is_explicit_constructible_v<T,
+        Args...>) inline constexpr basic_object(Args&&... args) noexcept
+        : object_root{traits::type_object()}
+        , storage_{std::in_place, std::forward<Args>(args)...} {
+        static_assert(std::is_base_of_v<basic_object, D>);
+    }
 
     template <typename... Args>
     requires std::is_constructible_v<T, Args>
-    LEV_HIDE_INSTANTIATION inline basic_object(Args&&... args) noexcept(
-        std::is_nothrow_constructible_v<T, Args>)
-        : object_root{adaptor_traits<T>::type_object()}
-        , storage_{std::in_place, std::forward<Args>(args)...} {}
+    LEV_HIDE_INSTANTIATION inline basic_object(Args&&... args) try
+        : object_root{traits::type_object()}
+        , storage_{std::in_place, std::forward<Args>(args)...} {
+        static_assert(std::is_base_of_v<basic_object, D>);
+    } catch (std::exception const& error) {
+        PyErr_Format(PyExc_RuntimeError,
+            "Initialization failed, Type=[%s], Reason=[Exception thrown], "
+            "Message=[%s]",
+            traits::type_name(), error.what());
+    } catch (...) {
+        PyErr_Format(PyExc_RuntimeError,
+            "Initialization failed, Type=[%s], Reason=[Unknown exception "
+            "thrown]",
+            traits::type_name());
+    }
 
     LEV_HIDE_INSTANTIATION inline constexpr bool initialized() const noexcept {
         return storage_.has_value();
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr operator T const&() const noexcept {
+    LEV_HIDE_INSTANTIATION inline constexpr
+    operator T const&() const& noexcept {
         return *storage_;
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr operator T&() noexcept {
+    LEV_HIDE_INSTANTIATION inline constexpr operator T&() & noexcept {
         return *storage_;
     }
 
@@ -80,11 +108,13 @@ private:
     std::optional<T> storage_;
 };
 
-template <typename T, instantiation_concept I>
-class LEV_API basic_object<T, I> : public object_root {
-    using traits = adaptor_traits<T>;
+template <typename D, typename T, instantiation_concept I>
+class LEV_API basic_object<D, T, I> : public object_root {
+    using traits = adaptor_traits<D>;
 
 public:
+    using type = D;
+    using element_type = T;
     using instantiation_concept = I;
 
     template <typename... Args>
@@ -93,25 +123,35 @@ public:
     LEV_HIDE_INSTANTIATION explicit(is_explicit_constructible_v<T,
         Args...>) inline constexpr basic_object(Args&&... args) noexcept
         : object_root{traits::type_object()}
-        , object_{args...} {}
+        , object_{std::forward<Args>(args)...} {
+        static_assert(std::is_base_of_v<basic_object, D>);
+    }
 
     template <typename... Args>
     requires std::constructible_from<T, Args...>
     LEV_HIDE_INSTANTIATION explicit(is_explicit_constructible_v<T, Args...>)
         basic_object(Args&&... args) try
         : object_root{traits::type_object()}
-        , object_{args...} {
+        , object_{std::forward<Args>(args)...} {
+        static_assert(std::is_base_of_v<basic_object, D>);
     } catch (std::exception const& error) {
-        // TODO
+        PyErr_Format(PyExc_RuntimeError,
+            "Initialization failed, Type=[%s], Reason=[Exception thrown], "
+            "Message=[%s]",
+            traits::type_name(), error.what());
     } catch (...) {
-        // TODO
+        PyErr_Format(PyExc_RuntimeError,
+            "Initialization failed, Type=[%s], Reason=[Unknown exception "
+            "thrown]",
+            traits::type_name());
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr operator T const&() const noexcept {
+    LEV_HIDE_INSTANTIATION inline constexpr
+    operator T const&() const& noexcept {
         return object_;
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr operator T&() noexcept {
+    LEV_HIDE_INSTANTIATION inline constexpr operator T&() & noexcept {
         return object_;
     }
 
@@ -133,20 +173,6 @@ protected:
 
 private:
     T object_;
-};
-
-template <typename T, instantiation_concept I>
-requires (std::is_void_v<T>)
-class LEV_API basic_object<T, I> : public object_root {
-public:
-    using instantiation_concept = I;
-
-    LEV_HIDE_INSTANTIATION inline constexpr basic_object(
-        python_ptr<PyObject> ptr) noexcept
-        : object_root{std::move(ptr)} {}
-
-protected:
-    LEV_HIDE_INSTANTIATION constexpr ~basic_object() noexcept = default;
 };
 
 } // namespace lev

@@ -20,7 +20,7 @@ DEFINE_PYTHON_MODULE(my_module);
 template <auto>
 struct uses {};
 
-struct foo : basic_object<MyClass> {
+struct foo : basic_object<foo, MyClass> {
     // MACRO BEGIN
     template <argument::declaration... Ts>
     using arguments = lev::argument::tuple<Ts...>;

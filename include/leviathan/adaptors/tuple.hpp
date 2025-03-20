@@ -95,12 +95,12 @@ instance_to_span(unmanaged_ptr<PyTupleObject> ptr) {
         return (... && dynamic_ptr_cast<Ts>(items[Is]));
     }(std::make_index_sequence<E>{});
 
-    if (types_valid) {
-        return span_type{items};
+    if (!types_valid) {
+        failure<type_error, PyExc_TypeError>(
+            details::tuple::invalid_type_message_v);
     }
 
-    failure<type_error, PyExc_TypeError>(
-        details::tuple::invalid_type_message_v);
+    return span_type{items};
 }
 
 template <typename T, size_t E>
@@ -129,25 +129,25 @@ LEV_HIDE_INSTANTIATION static std::span<PyObject* const, E> instance_to_span(
     }
 
     auto items = details::tuple::items(ptr, size);
-    if constexpr (E != dynamic_extent) {
-        auto const types_valid = [&]<size_t... Is>(std::index_sequence<Is...>) {
-            return (... && dynamic_ptr_cast<T>(items[Is]));
-        }(std::make_index_sequence<E>{});
 
-        if (types_valid) {
-            return span_type{items};
+    auto const types_valid = [&]() {
+        if constexpr (E != dynamic_extent) {
+            return [&]<size_t... Is>(std::index_sequence<Is...>) {
+                return (... && dynamic_ptr_cast<T>(items[Is]));
+            }(std::make_index_sequence<E>{});
+        } else {
+            return std::ranges::all_of(items, [](PyObject* ptr) {
+                return dynamic_ptr_cast<T>(ptr) != nullptr;
+            });
         }
-    } else {
-        auto const types_valid = std::ranges::all_of(items,
-            [](PyObject* ptr) -> bool { return dynamic_ptr_cast<T>(ptr); });
+    }();
 
-        if (types_valid) {
-            return span_type{items};
-        }
+    if (!types_valid) {
+        failure<type_error, PyExc_TypeError>(
+            details::tuple::invalid_type_message_v);
     }
 
-    failure<type_error, PyExc_TypeError>(
-        details::tuple::invalid_type_message_v);
+    return span_type{items};
 }
 
 template <pyobj_type T, typename Span>

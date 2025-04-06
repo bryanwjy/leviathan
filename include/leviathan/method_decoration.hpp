@@ -78,6 +78,12 @@ struct decorator_t<Os...> : public Os... {
 public:
     explicit inline consteval decorator_t() = default;
 
+    friend consteval Os decoration(decorator_t) noexcept
+    requires (sizeof...(Os) == 1)
+    {
+        return Os{};
+    }
+
     template <typename U>
     requires requires(U u) { requires (... || std::same_as<U, Os>); }
     inline consteval decorator_t<Os...> operator|(
@@ -107,18 +113,13 @@ LEV_HIDDEN inline constexpr bool is_decorator_v<T const> = is_decorator_v<T>;
 template <typename... Ts>
 LEV_HIDDEN inline constexpr bool is_decorator_v<decorator_t<Ts...>> = true;
 
-template <typename T, method_decorator auto U>
-LEV_HIDDEN inline constexpr bool has_decoration_v =
-    std::is_base_of_v<T, decltype(U)>;
-
 template <typename T>
 concept decorator = is_decorator_v<T>;
 
-template <typename T, auto... Os>
-concept decorated_with = decorator<T> &&
-    (... &&
-        derived_from<std::remove_const_t<T>,
-            std::remove_const_t<decltype(Os)>>);
+template <auto T, auto... Os>
+concept decorated_with = decorator<decltype(T)> &&
+    (... && decorator<decltype(Os)>)&&(
+        ... && std::derived_from<T, decltype(decoration(Os))>);
 
 } // namespace lev::method
 

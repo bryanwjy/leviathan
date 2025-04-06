@@ -66,11 +66,12 @@ private:
 };
 
 template <typename Value>
-class value_reference;
+class element_reference;
 
 template <typename Impl>
-class value_reference : Impl {
-    using Impl::set_value;
+class element_reference : Impl {
+    using pointer = typename Impl::type*;
+    using reference = typename Impl::type&;
 
 public:
     using type = typename Impl::type;
@@ -78,143 +79,57 @@ public:
     template <typename... Args>
     requires std::constructible_from<Impl, Args...>
     LEV_HIDE_INSTANTIATION explicit(is_explicit_constructible_v<Impl,
-        Args...>) inline constexpr value_reference(Args&&... args) noexcept
+        Args...>) inline constexpr element_reference(Args&&... args) noexcept
         : Impl{std::forward<Args>(args)...} {}
 
-    LEV_HIDE_INSTANTIATION inline constexpr unmanaged_ptr<type>
-    value() const noexcept {
-        static_assert(requires(Impl const& val) {
-            {
-                val.value()
-            } noexcept -> std::convertible_to<unmanaged_ptr<type>>;
-        });
-
-        return static_cast<unmanaged_ptr<type>>(Impl::value());
+    LEV_HIDE_INSTANTIATION
+    inline constexpr unmanaged_ptr<type> get() const
+        noexcept(noexcept(Impl::get_pointer()))
+    requires requires(element_reference const& ref) {
+        { impl.get_pointer() } -> std::convertible_to<unmanaged_ptr<type>>;
     }
-
-    LEV_HIDE_INSTANTIATION inline constexpr operator bool() const noexcept
-    requires std::convertible_to<Impl, bool>
     {
-        static_assert(
-            noexcept(static_cast<bool>(static_cast<Impl const&>(*this))),
-            "bool conversion operator must be noexcept");
-        return static_cast<bool>(static_cast<Impl const&>(*this));
+        return static_cast<unmanaged_ptr<type>>(Impl::get_pointer());
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr operator bool() const noexcept {
-        return static_cast<bool>(value());
+    LEV_HIDE_INSTANTIATION inline constexpr operator pointer() const noexcept
+    requires requires(element_reference const& ref) { impl.get(); }
+    {
+        return get();
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr
-    operator unmanaged_ptr<type>() const noexcept {
-        return value();
+    LEV_HIDE_INSTANTIATION inline constexpr pointer operator->() const noexcept
+    requires requires(element_reference const& ref) { impl.get(); }
+    {
+        return get();
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr value_reference& operator=(
-        python_ptr<type> val) noexcept(noexcept(set_value(std::move(val)))) {
-
-        static_assert(requires(Impl const& val, python_ptr<type> arg) {
-            { val.set_value(std::move(arg)) };
-        });
-        Impl::set_value(std::move(val));
-        return *this;
+    LEV_HIDE_INSTANTIATION inline constexpr reference operator*() const
+        noexcept(noexcept(Impl::get_reference()))
+    requires requires(element_reference const& impl) {
+        { impl.get_reference() } -> std::convertible_to<reference>;
+    }
+    {
+        return static_cast<reference>(Impl::get_reference());
     }
 
-    template <pyobj_derived_from<type> U>
-    LEV_HIDE_INSTANTIATION inline constexpr value_reference&
-    operator=(python_ptr<U> val) noexcept(
-        noexcept(set_value(static_ptr_cast<type>(std::move(val))))) {
-        static_assert(requires(Impl const& val, python_ptr<type> arg) {
-            { val.set_value(std::move(arg)) };
-        });
-        Impl::set_value(static_ptr_cast<type>(std::move(val)));
+    LEV_HIDE_INSTANTIATION explicit inline constexpr
+    operator bool() const noexcept
+    requires requires(element_reference const& ref) {
+        { impl.valid() } -> std::convertible_to<bool>;
+    }
+    {
+        return static_cast<bool>(Impl::valid());
+    }
+
+    template <typename U>
+    requires requires(
+        element_reference& impl) { impl.set_pointer(std::declval<U>()); }
+    LEV_HIDE_INSTANTIATION inline constexpr element_reference& operator=(
+        U&& val) noexcept(noexcept(Impl::set_pointer(std::declval<U>()))) {
+        Impl::set_pointer(std::forward(val));
         return *this;
     }
 };
-
-template <pyobj_type T, typename Span>
-class transforming_const_iterator : typename Span::const_iterator {
-    using base_iterator = typename Span::const_iterator;
-
-public:
-    using value_type = unmanaged_ptr<T>;
-    using difference_type = ptrdiff_t;
-    using iterator_concept = std::random_access_iterator_tag;
-
-    using base_iterator::base_iterator;
-
-    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline auto
-    operator*() const noexcept {
-        return static_ptr_cast<T>(base_iterator::operator*());
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline auto operator[](
-        size_t idx) const noexcept {
-        return static_ptr_cast<T>(base_iterator::operator[](idx));
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator
-    operator+(difference_type offset) const noexcept {
-        return transforming_iterator{base_iterator::base() + offset};
-    }
-
-    LEV_HIDE_INSTANTIATION
-    [[nodiscard]] friend inline constexpr transforming_iterator operator+(
-        difference_type offset, transforming_iterator const& it) noexcept {
-        return transforming_iterator{it.base() + offset};
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator
-    operator-(difference_type offset) const noexcept {
-        return transforming_iterator{base_iterator::base() - offset};
-    }
-
-    LEV_HIDE_INSTANTIATION
-    [[nodiscard]] friend inline constexpr difference_type operator-(
-        transforming_iterator const& left,
-        transforming_iterator const& right) noexcept {
-        return static_cast<base_iterator const&>(left) -
-            static_cast<base_iterator const&>(right);
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator&
-    operator+=(difference_type offset) noexcept {
-        static_cast<base_iterator&>(*this) += offset;
-        return *this;
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator&
-    operator-=(difference_type offset) noexcept {
-        static_cast<base_iterator&>(*this) -= offset;
-        return *this;
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator&
-    operator++() noexcept {
-        ++static_cast<base_iterator&>(*this);
-        return *this;
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator
-    operator++(int) noexcept {
-        transforming_iterator before = *this;
-        ++static_cast<base_iterator&>(*this);
-        return before;
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator&
-    operator--() noexcept {
-        --static_cast<base_iterator&>(*this);
-        return *this;
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator
-    operator--(int) noexcept {
-        transforming_iterator before = *this;
-        --static_cast<base_iterator&>(*this);
-        return before;
-    }
-};
-
 } // namespace py
 } // namespace lev

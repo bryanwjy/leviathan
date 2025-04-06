@@ -14,32 +14,39 @@ namespace py {
 template <typename Key, typename T = PyObject, bool Mutable = true>
 class basic_dict;
 template <typename Key, typename T = PyObject, bool Mutable = true>
-class basic_dict_view;
+class basic_borrowed_dict;
+
+using dict = basic_dict<PyObject>;
+using const_dict = basic_dict<PyObject, PyObject, false>;
 
 template <typename Key, typename T = PyObject>
-using dict = basic_dict<Key, T, true>;
+using basic_const_dict = basic_dict<Key, T, false>;
 template <typename Key, typename T = PyObject>
-using const_dict = basic_dict<Key, T, false>;
-template <typename Key, typename T = PyObject>
-using dict_view = basic_dict_view<Key, T, true>;
-template <typename Key, typename T = PyObject>
-using const_dict_view = basic_dict_view<Key, T, false>;
-using kwargs = const_dict<PyASCIIObject>;
+using basic_const_borrowed_dict = basic_borrowed_dict<Key, T, false>;
 
-namespace views {
-template <pyobj_type Key, pyobj_type T>
-using dict = dict_view<Key, T, true>;
-template <pyobj_type Key, pyobj_type T>
-using const_dict = dict_view<Key, T, false>;
-using kwargs = const_dict_view<PyASCIIObject>;
-} // namespace views
+using borrowed_dict = basic_borrowed_dict<PyObject>;
+using const_borrowed_dict = basic_const_borrowed_dict<PyObject>;
+using kwargs = basic_const_dict<PyASCIIObject>;
+using borrowed_kwargs = basic_const_borrowed_dict<PyASCIIObject>;
+
+namespace borrowed {
+
+using dict = borrowed_dict;
+using const_dict = const_borrowed_dict;
+using kwargs = borrowed_kwargs<PyASCIIObject>;
+
+template <typename Key, typename T = PyObject>
+using basic_const_dict = basic_borrowed_dict<Key, T, false>;
+template <typename Key, typename T = PyObject>
+using basic_dict = basic_borrowed_dict<Key, T>;
+} // namespace borrowed
 
 namespace details::dict {
 
 template <pyobj_type Key, pyobj_type T>
-class value_setter {
+class value_reference {
 public:
-    constexpr value_setter(unmanaged_ptr<PyDictObject> container,
+    constexpr value_reference(unmanaged_ptr<PyDictObject> container,
         unmanaged_ptr<Key> key, unmanaged_ptr<PyObject> val) noexcept
         : dict_{container}
         , key_{key}
@@ -48,7 +55,9 @@ public:
 protected:
     using type = T;
 
-    LEV_HIDE_INSTANTIATION inline constexpr operator bool() const noexcept {
+    LEV_HIDE_INSTANTIATION inline constexpr ~value_reference() = default;
+
+    LEV_HIDE_INSTANTIATION inline constexpr bool valid() const noexcept {
         if constexpr (std::same_as<PyObject, T>) {
             return value_ != nullptr;
         } else {
@@ -56,7 +65,8 @@ protected:
         }
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr unmanaged_ptr<T> value() const {
+    LEV_HIDE_INSTANTIATION inline constexpr unmanaged_ptr<T>
+    get_pointer() const {
         LEV_ASSERT(value_ != nullptr);
 
         if constexpr (std::is_convertible_v<unmanaged_ptr<PyObject>,
@@ -75,8 +85,21 @@ protected:
         }
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr void set_value(
+    LEV_HIDE_INSTANTIATION inline constexpr void set_pointer(
         unmanaged_ptr<T> val) const {
+        LEV_ASSERT(val);
+        if (value_ == nullptr) {
+            failure<std::runtime_error, PyExc_RuntimeError>(
+                "Invalid reference proxy state for dictionary");
+        }
+
+        PyDict_SetItem(dict_, key_, val);
+        value_ = val;
+    }
+
+    template <pyobj_derived_from<T> U>
+    LEV_HIDE_INSTANTIATION inline constexpr void set_pointer(
+        unmanaged_ptr<U> ptr) const {
         LEV_ASSERT(val);
         if (value_ == nullptr) {
             failure<std::runtime_error, PyExc_RuntimeError>(
@@ -96,7 +119,8 @@ private:
 template <pyobj_type Key, pyobj_type T>
 class iterator {
     friend basic_dict<Key, T, true>;
-    friend basic_dict_view<Key, T, true>;
+    friend basic_borrowed_dict<Key, T, true>;
+    using reference_proxy = element_reference<value_reference<Key, T>>;
 
     LEV_HIDE_INSTANTIATION explicit inline constexpr iterator(
         unmanaged_ptr<PyDictObject> ptr, Py_ssize_t pos) noexcept
@@ -104,8 +128,7 @@ class iterator {
         , pos_{pos} {}
 
 public:
-    using value_type =
-        std::pair<unmanaged_ptr<Key>, value_reference<value_setter<Key, T>>>;
+    using value_type = std::pair<unmanaged_ptr<Key>, reference_proxy>;
     using difference_type = ptrdiff_t;
     using iterator_concept = std::forward_iterator_tag;
 
@@ -120,12 +143,11 @@ public:
 
     LEV_HIDE_INSTANTIATION [[nodiscard]] inline value_type
     operator*() const noexcept {
-        using proxy_type = value_reference<value_setter<Key, T>>;
         Py_ssize_t pos = pos_;
         PyObject *key, *value;
         PyDict_Next(instance_, pos, &key, &value);
         return {
-            key, proxy_type{instance_, key, value}
+            key, reference_proxy{instance_, key, value}
         };
     }
 
@@ -174,9 +196,9 @@ class const_iterator {
         , pos_{pos} {}
 
     friend basic_dict<Key, T, true>;
-    friend basic_dict_view<Key, T, true>;
+    friend basic_borrowed_dict<Key, T, true>;
     friend basic_dict<Key, T, false>;
-    friend basic_dict_view<Key, T, false>;
+    friend basic_borrowed_dict<Key, T, false>;
 
 public:
     LEV_HIDE_INSTANTIATION explicit inline constexpr const_iterator(
@@ -268,15 +290,15 @@ class basic_dict<Key, T, M> {
     template <typename, typename, bool>
     friend class basic_dict;
 
-    using mapped_reference =
-        value_reference<details::dict::value_setter<Key, T>>;
+    using reference_proxy =
+        element_reference<details::dict::value_reference<Key, T>>;
 
 public:
     using key_type = unmanaged_ptr<Key>;
     using mapped_type = unmanaged_ptr<T>;
     using value_type = std::pair<unmanaged_ptr<Key> const, unmanaged_ptr<T>>;
     using reference = std::conditional_t<M,
-        std::pair<unmanaged_ptr<Key> const, mapped_reference>, value_type>;
+        std::pair<unmanaged_ptr<Key> const, reference_proxy>, value_type>;
     using const_reference = value_type;
     using size_type = size_t;
     using difference_type = ptrdiff_t;
@@ -331,7 +353,7 @@ public:
     template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V, bool Mutable>
     requires (!M || Mutable)
     LEV_HIDE_INSTANTIATION explicit inline basic_dict(
-        adopt_t tag, basic_dict_view<K, V, Mutable> other) noexcept
+        adopt_t tag, basic_borrowed_dict<K, V, Mutable> other) noexcept
         : instance_{tag, other.instance()} {
         if constexpr (M) {
             LEV_ASSERT(instance_);
@@ -418,19 +440,19 @@ public:
     }
 
     template <pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline mapped_reference at(
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline reference_proxy at(
         unmanaged_ptr<K> key)
     requires (M)
     {
-        return mapped_reference{instance_, key, std::as_const(*this).at(key)};
+        return reference_proxy{instance_, key, std::as_const(*this).at(key)};
     }
 
     template <nothrow_t Tag, pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline mapped_reference at(
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline reference_proxy at(
         unmanaged_ptr<K> key) noexcept
     requires (M)
     {
-        return mapped_reference{
+        return reference_proxy{
             instance_, key, std::as_const(*this).at<Tag>(key)};
     }
 
@@ -485,14 +507,14 @@ public:
     }
 
     template <pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline mapped_reference operator[](
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline reference_proxy operator[](
         unmanaged_ptr<K> key) noexcept
     requires (M)
     {
         LEV_ASSERT(key);
         unmanaged_ptr<PyObject> value =
             PyDict_SetDefault(instance_, key, Py_None);
-        return mapped_reference{instance_, key, value};
+        return reference_proxy{instance_, key, value};
     }
 
     template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V>
@@ -531,21 +553,21 @@ requires std::same_as<PyObject, T> || requires(unmanaged_ptr<PyObject> ptr) {
     type_object_v<T>;
     { dynamic_ptr_cast<T>(ptr) } noexcept;
 }
-class basic_dict_view<Key, T, M> {
+class basic_borrowed_dict<Key, T, M> {
     static_assert(
         !leviathan_pyobj<Key> || adaptor_traits<Key>::hashable::value);
     template <typename, typename, bool>
-    friend class basic_dict_view;
+    friend class basic_borrowed_dict;
 
-    using mapped_reference =
-        value_reference<details::dict::value_setter<Key, T>>;
+    using reference_proxy =
+        value_reference<details::dict::value_reference<Key, T>>;
 
 public:
     using key_type = unmanaged_ptr<Key>;
     using mapped_type = unmanaged_ptr<T>;
     using value_type = std::pair<unmanaged_ptr<Key> const, unmanaged_ptr<T>>;
     using reference = std::conditional_t<M,
-        std::pair<unmanaged_ptr<Key> const, mapped_reference>, value_type>;
+        std::pair<unmanaged_ptr<Key> const, reference_proxy>, value_type>;
     using const_reference = value_type;
     using size_type = size_t;
     using difference_type = ptrdiff_t;
@@ -553,7 +575,7 @@ public:
     using iterator =
         std::conditional_t<M, details::dict::iterator<Key, T>, const_iterator>;
 
-    LEV_HIDE_INSTANTIATION explicit inline constexpr basic_dict_view(
+    LEV_HIDE_INSTANTIATION explicit inline constexpr basic_borrowed_dict(
         python_ptr<PyDictObject> const& ptr LEV_LIFETIMEBOUND) noexcept
         : instance_{ptr} {
         if constexpr (!M) {
@@ -561,19 +583,19 @@ public:
         }
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr basic_dict_view(
-        basic_dict_view const& other) noexcept = default;
-    LEV_HIDE_INSTANTIATION inline constexpr basic_dict_view(
-        basic_dict_view&& other) noexcept = default;
-    LEV_HIDE_INSTANTIATION inline constexpr basic_dict_view& operator=(
-        basic_dict_view const& other) noexcept = default;
-    LEV_HIDE_INSTANTIATION inline constexpr basic_dict_view& operator=(
-        basic_dict_view&& other) noexcept = default;
+    LEV_HIDE_INSTANTIATION inline constexpr basic_borrowed_dict(
+        basic_borrowed_dict const& other) noexcept = default;
+    LEV_HIDE_INSTANTIATION inline constexpr basic_borrowed_dict(
+        basic_borrowed_dict&& other) noexcept = default;
+    LEV_HIDE_INSTANTIATION inline constexpr basic_borrowed_dict& operator=(
+        basic_borrowed_dict const& other) noexcept = default;
+    LEV_HIDE_INSTANTIATION inline constexpr basic_borrowed_dict& operator=(
+        basic_borrowed_dict&& other) noexcept = default;
 
     template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V, bool Mutable>
     requires (!M || Mutable)
-    LEV_HIDE_INSTANTIATION inline constexpr basic_dict_view(
-        basic_dict_view<K, V, Mutable> other) noexcept
+    LEV_HIDE_INSTANTIATION inline constexpr basic_borrowed_dict(
+        basic_borrowed_dict<K, V, Mutable> other) noexcept
         : instance_{other.instance_} {
         if constexpr (M) {
             LEV_ASSERT(instance_);
@@ -582,7 +604,7 @@ public:
 
     template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V, bool Mutable>
     requires (!M || Mutable)
-    LEV_HIDE_INSTANTIATION inline constexpr basic_dict_view(
+    LEV_HIDE_INSTANTIATION inline constexpr basic_borrowed_dict(
         basic_dict<K, V, Mutable> const& other LEV_LIFETIMEBOUND) noexcept
         : instance_{other.instance()} {
         if constexpr (M) {
@@ -663,19 +685,19 @@ public:
     }
 
     template <pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline mapped_reference at(
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline reference_proxy at(
         unmanaged_ptr<K> key)
     requires (M)
     {
-        return mapped_reference{instance_, key, std::as_const(*this).at(key)};
+        return reference_proxy{instance_, key, std::as_const(*this).at(key)};
     }
 
     template <nothrow_t Tag, pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline mapped_reference at(
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline reference_proxy at(
         unmanaged_ptr<K> key) noexcept
     requires (M)
     {
-        return mapped_reference{
+        return reference_proxy{
             instance_, key, std::as_const(*this).at<Tag>(key)};
     }
 
@@ -728,14 +750,14 @@ public:
     }
 
     template <pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline mapped_reference operator[](
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline reference_proxy operator[](
         unmanaged_ptr<K> key) noexcept
     requires (M)
     {
         LEV_ASSERT(key);
         unmanaged_ptr<PyObject> value =
             PyDict_SetDefault(instance_, key, Py_None);
-        return mapped_reference{instance_, key, value};
+        return reference_proxy{instance_, key, value};
     }
 
     template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V>

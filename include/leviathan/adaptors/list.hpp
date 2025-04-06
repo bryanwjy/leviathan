@@ -46,6 +46,8 @@ template <pyobj_type T, bool M>
 class LEV_API basic_list<T, M> {
     using span_type =
         std::conditional_t<M, std::span<PyObject*>, std::span<PyObject* const>>;
+    using reference_proxy = element_reference<
+        details::random_access_reference<T, cast_policy::safe>>;
 
 public:
     using size_type = size_t;
@@ -130,17 +132,17 @@ public:
 
     LEV_HIDE_INSTANTIATION LEV_PURE
         [[nodiscard]] inline constexpr unmanaged_ptr<T>
-        operator[](difference_type idx) const noexcept LEV_LIFETIMEBOUND {
-        LEV_ASSERT(instance_ && !empty());
+        operator[](size_type idx) const noexcept LEV_LIFETIMEBOUND {
+        LEV_ASSERT(instance_ && !empty() && idx < size());
         return dynamic_ptr_cast<T>(instance_->ob_item[idx]);
     }
 
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto
-    operator[](difference_type idx) const noexcept LEV_LIFETIMEBOUND
+    operator[](size_type idx) const noexcept LEV_LIFETIMEBOUND
     requires M
     {
-        LEV_ASSERT(instance_ && !empty());
-        return details::random_access_reference<T>{instance_->ob_item[idx]};
+        LEV_ASSERT(instance_ && !empty() && idx < size());
+        return reference_proxy{instance_->ob_item[idx]};
     }
 
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr bool

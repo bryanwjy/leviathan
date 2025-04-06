@@ -37,30 +37,25 @@ public:
         PyObject*& ptr)
         : location_{ptr} {}
 
-    LEV_HIDE_INSTANTIATION inline constexpr operator T*() const noexcept {
-        return dispatch_cast<T, P>(location_);
-    }
+protected:
+    LEV_HIDE_INSTANTIATION inline constexpr ~random_access_reference() =
+        default;
 
     LEV_HIDE_INSTANTIATION inline constexpr unmanaged_ptr<T>
-    get() const noexcept {
+    get_pointer() const noexcept {
         return dispatch_cast<T, P>(location_);
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr
-    operator unmanaged_ptr<T>() const noexcept {
-        return dispatch_cast<T, P>(location_);
+    LEV_HIDE_INSTANTIATION inline constexpr bool valid() const noexcept {
+        return get_pointer();
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr T* operator->() const noexcept {
-        return dispatch_cast<T, P>(location_);
-    }
-
-    LEV_HIDE_INSTANTIATION inline constexpr T& operator*() const noexcept {
+    LEV_HIDE_INSTANTIATION inline constexpr T& get_reference() const noexcept {
         LEV_ASSERT(location_);
         return static_ptr_cast<T>(*location_);
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr T& operator*() const
+    LEV_HIDE_INSTANTIATION inline constexpr T& get_reference() const
     requires (P == cast_policy::safe)
     {
         LEV_ASSERT(location_);
@@ -72,43 +67,34 @@ public:
             "Unexpected type dereferenced during random access iteration");
     }
 
-    LEV_HIDE_INSTANTIATION explicit inline constexpr
-    operator bool() const noexcept {
-        return dispatch_cast<T, P>(location_) != nullptr;
-    }
-
-    LEV_HIDE_INSTANTIATION inline constexpr random_access_reference& operator=(
+    LEV_HIDE_INSTANTIATION inline constexpr void set_pointer(
         python_ptr<T> const& ptr) const {
         python_ptr{retain_object,
             exchange(location_, as_pyobject(adopt(ptr).release()))}
             .reset();
-        return *this;
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr random_access_reference& operator=(
+    LEV_HIDE_INSTANTIATION inline constexpr void set_pointer(
         python_ptr<T>&& ptr) const {
         python_ptr{
             retain_object, exchange(location_, as_pyobject(ptr.release()))}
             .reset();
-        return *this;
     }
 
     template <pyobj_derived_from<T> U>
-    LEV_HIDE_INSTANTIATION inline constexpr random_access_reference& operator=(
+    LEV_HIDE_INSTANTIATION inline constexpr void set_pointer(
         python_ptr<U> const& ptr) const {
         python_ptr{retain_object,
             exchange(location_, as_pyobject(adopt(ptr).release()))}
             .reset();
-        return *this;
     }
 
     template <pyobj_derived_from<T> U>
-    LEV_HIDE_INSTANTIATION inline constexpr random_access_reference& operator=(
+    LEV_HIDE_INSTANTIATION inline constexpr void set_pointer(
         python_ptr<U>&& ptr) const {
         python_ptr{
             retain_object, exchange(location_, as_pyobject(ptr.release()))}
             .reset();
-        return *this;
     }
 
 private:
@@ -119,6 +105,8 @@ private:
 template <pyobj_type T, cast_policy P>
 class random_access_iterator<T, P> {
     using this_type = random_access_const_iterator;
+    using reference_proxy =
+        element_reference<details::random_access_reference<T, P>>;
 
 public:
     using value_type = unmanaged_ptr<T>;
@@ -138,12 +126,12 @@ public:
 
     LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline auto
     operator*() const noexcept {
-        return details::random_access_reference<T, P>(*location_);
+        return reference_proxy(*location_);
     }
 
     LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline auto operator[](
         difference_type idx) const noexcept {
-        return details::random_access_reference<T, P>(location_[idx]);
+        return reference_proxy(location_[idx]);
     }
 
     LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type operator+(

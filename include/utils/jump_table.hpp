@@ -1,6 +1,6 @@
 #pragma once
 
-#include "leviathan/type_traits.h"
+#include "utils/type_traits.hpp"
 
 #include <concepts>
 

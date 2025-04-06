@@ -3,7 +3,6 @@
 
 #include "leviathan/argument_tuple.hpp"
 #include "leviathan/conversions.hpp"
-#include "leviathan/type_traits.hpp"
 #include "leviathan/utility.hpp"
 
 #include <Python.h>

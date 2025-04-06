@@ -15,6 +15,6 @@
 		},
 	},
 	"syntax_override": {
-		".*\\.(hpp|cpp)$": ["C++", "UTL"],
+		".*\\.(hpp|cpp|h)$": ["C++", "UTL"],
 	}
 }

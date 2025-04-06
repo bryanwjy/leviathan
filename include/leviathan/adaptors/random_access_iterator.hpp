@@ -1,5 +1,7 @@
 // Copyright 2025, Bryan Wong
 
+#include "leviathan/pointer.hpp"
+
 #include <Python.h>
 
 #include <compare>
@@ -8,27 +10,12 @@
 namespace lev {
 namespace py {
 
-enum class cast_policy {
-    safe,
-    unsafe
-};
-
 template <typename T, cast_policy = cast_policy::safe>
 class random_access_iterator;
 template <typename T, cast_policy = cast_policy::safe>
 class random_access_const_iterator;
 
 namespace details {
-
-template <pyobj_type T, cast_policy P>
-LEV_HIDE_INSTANTIATION inline constexpr auto dispatch_cast(
-    auto&& ptr) const noexcept {
-    if constexpr (P == cast_policy::safe) {
-        return dynamic_ptr_cast<T>(std::forward<decltype(ptr)>(ptr));
-    } else {
-        return static_ptr_cast<T>(std::forward<decltype(ptr)>(ptr));
-    }
-}
 
 template <pyobj_type T, cast_policy P>
 class random_access_reference<T, P> {

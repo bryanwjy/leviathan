@@ -1,11 +1,12 @@
 // Copyright 2025, Bryan Wong
 #pragma once
 
+#include "leviathan/object_traits.hpp"
+#include "leviathan/utility.hpp"
+
 #include <Python.h>
 
 #include <compare>
-#include <leviathan/object_traits.hpp>
-#include <leviathan/utility.hpp>
 
 namespace lev {
 
@@ -584,6 +585,21 @@ exact_ptr_cast(unmanaged_ptr<From> other) noexcept {
     }
 
     return nullptr;
+}
+
+enum class cast_policy {
+    safe,
+    unsafe
+};
+
+template <pyobj_type T, cast_policy P>
+LEV_HIDE_INSTANTIATION inline constexpr auto dispatch_cast(
+    auto&& ptr) const noexcept {
+    if constexpr (P == cast_policy::safe) {
+        return dynamic_ptr_cast<T>(std::forward<decltype(ptr)>(ptr));
+    } else {
+        return static_ptr_cast<T>(std::forward<decltype(ptr)>(ptr));
+    }
 }
 
 } // namespace lev

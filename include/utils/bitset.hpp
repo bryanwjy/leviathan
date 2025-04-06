@@ -1,12 +1,16 @@
 // Copyright 2025, Bryan Wong
 #pragma once
 
-#include "leviathan/string.hpp"
+#include "utils/common.hpp"
+#include "utils/type_traits.hpp"
+#include "utils/utility.hpp"
 
 #include <bit>
 #include <climits>
+#include <concepts>
+#include <span>
 
-namespace lev {
+namespace ltl {
 namespace bit::details {
 consteval size_t ceil_div(size_t val, size_t div) noexcept {
     return (val + div - 1) / div;
@@ -159,4 +163,4 @@ private:
     underlying_type storage_;
 };
 
-} // namespace lev
+} // namespace ltl

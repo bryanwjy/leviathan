@@ -1,11 +1,11 @@
 // Copyright 2025, Bryan Wong
 #pragma once
 
-#include "leviathan/_common.hpp"
-#include "leviathan/type_traits.hpp"
-#include "leviathan/utility.hpp"
+#include "utils/common.hpp"
+#include "utils/type_traits.hpp"
+#include "utils/utility.hpp"
 
-namespace lev::details {
+namespace ltl::details {
 
 template <typename T0, typename T1>
 LEV_HIDDEN inline constexpr bool fits_in_tail_padding_v = []() {
@@ -67,4 +67,4 @@ struct conditionally_overlapable<false, T> {
 
     T data;
 };
-} // namespace lev::details
+} // namespace ltl::details

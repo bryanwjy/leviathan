@@ -2,8 +2,8 @@
 #pragma once
 
 #include "leviathan/argument_declaration.hpp"
-#include "leviathan/bitset.hpp"
-#include "leviathan/type_traits.hpp"
+#include "utils/bitset.hpp"
+#include "utils/type_traits.hpp"
 
 #include <array>
 

@@ -1,12 +1,10 @@
 // Copyright 2025, Bryan Wong
 #pragma once
 
-#include <Python.h>
-
 #include <concepts>
 #include <type_traits>
 
-namespace lev {
+namespace ltl {
 template <typename AdaptorType>
 consteval bool always_false() noexcept {
     return false;
@@ -213,6 +211,10 @@ struct first_data_member_of<T> {
 template <typename Sub, typename Obj>
 LEV_HIDDEN inline constexpr bool is_aliasable_subobject_of_v = false;
 
+template <typename Sub, size_t N>
+LEV_HIDDEN inline constexpr bool is_aliasable_subobject_of_v<
+    std::remove_cv_t<Sub>, std::remove_cv_t<Sub>[N]> = true;
+
 template <typename Sub, typename Obj>
 requires requires(Obj* ptr) {
     requires std::same_as<std::remove_cv_t<Sub>, std::remove_cv_t<Obj>>;
@@ -238,4 +240,4 @@ concept cv_convertible_to = requires {
     requires std::same_as<std::remove_cv_t<To>, std::remove_cv_t<From>>;
     requires std::convertible_to<From*, To*>;
 };
-} // namespace lev
+} // namespace ltl

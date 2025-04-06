@@ -2,7 +2,7 @@
 #pragma once
 
 #include "leviathan/argument_declaration.hpp"
-#include "leviathan/variant.hpp"
+#include "utils/variant.hpp"
 
 namespace lev {
 namespace argument {

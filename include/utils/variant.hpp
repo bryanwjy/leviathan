@@ -1,10 +1,11 @@
 // Copyright 2025, Bryan Wong
 #pragma once
 
-#include "leviathan/conditionally_overlapable.hpp"
-#include "leviathan/jump_table.hpp"
-#include "leviathan/type_traits.hpp"
-#include "leviathan/utility.hpp"
+#include "utils/common.hpp"
+#include "utils/conditionally_overlapable.hpp"
+#include "utils/jump_table.hpp"
+#include "utils/type_traits.hpp"
+#include "utils/utility.hpp"
 
 #include <array>
 #include <compare>
@@ -12,7 +13,7 @@
 #include <initializer_list>
 #include <ranges>
 
-namespace lev {
+namespace ltl {
 
 template <typename...>
 class LEV_PUBLIC variant;
@@ -59,8 +60,6 @@ struct LEV_API monostate {
 };
 
 namespace details {
-using details::conditionally_overlapable;
-using details::fits_in_tail_padding_v;
 
 template <typename...>
 union multi_union;
@@ -1423,4 +1422,4 @@ LEV_HIDE_INSTANTIATION inline constexpr R visit(F&& callable, Vs&&... values) {
             details::as_variant(std::forward<Vs>(values))...);
     }
 }
-} // namespace lev
+} // namespace ltl

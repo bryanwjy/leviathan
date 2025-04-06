@@ -1,0 +1,314 @@
+// Copyright 2025, Bryan Wong
+
+#include <Python.h>
+
+#include <compare>
+#include <span>
+
+namespace lev {
+namespace py {
+
+enum class cast_policy {
+    safe,
+    unsafe
+};
+
+template <typename T, cast_policy = cast_policy::safe>
+class random_access_iterator;
+template <typename T, cast_policy = cast_policy::safe>
+class random_access_const_iterator;
+
+namespace details {
+
+template <pyobj_type T, cast_policy P>
+LEV_HIDE_INSTANTIATION inline constexpr auto dispatch_cast(
+    auto&& ptr) const noexcept {
+    if constexpr (P == cast_policy::safe) {
+        return dynamic_ptr_cast<T>(std::forward<decltype(ptr)>(ptr));
+    } else {
+        return static_ptr_cast<T>(std::forward<decltype(ptr)>(ptr));
+    }
+}
+
+template <pyobj_type T, cast_policy P>
+class random_access_reference<T, P> {
+public:
+    LEV_HIDE_INSTANTIATION explicit inline constexpr random_access_reference(
+        PyObject*& ptr)
+        : location_{ptr} {}
+
+    LEV_HIDE_INSTANTIATION inline constexpr operator T*() const noexcept {
+        return dispatch_cast<T, P>(location_);
+    }
+
+    LEV_HIDE_INSTANTIATION inline constexpr unmanaged_ptr<T>
+    get() const noexcept {
+        return dispatch_cast<T, P>(location_);
+    }
+
+    LEV_HIDE_INSTANTIATION inline constexpr
+    operator unmanaged_ptr<T>() const noexcept {
+        return dispatch_cast<T, P>(location_);
+    }
+
+    LEV_HIDE_INSTANTIATION inline constexpr T* operator->() const noexcept {
+        return dispatch_cast<T, P>(location_);
+    }
+
+    LEV_HIDE_INSTANTIATION inline constexpr T& operator*() const noexcept {
+        LEV_ASSERT(location_);
+        return static_ptr_cast<T>(*location_);
+    }
+
+    LEV_HIDE_INSTANTIATION inline constexpr T& operator*() const
+    requires (P == cast_policy::safe)
+    {
+        LEV_ASSERT(location_);
+        if (auto ptr = dynamic_ptr_cast<T>(location_)) {
+            return *ptr;
+        }
+
+        failure<type_error, PyExc_TypeError>(
+            "Unexpected type dereferenced during random access iteration");
+    }
+
+    LEV_HIDE_INSTANTIATION explicit inline constexpr
+    operator bool() const noexcept {
+        return dispatch_cast<T, P>(location_) != nullptr;
+    }
+
+    LEV_HIDE_INSTANTIATION inline constexpr random_access_reference& operator=(
+        python_ptr<T> const& ptr) const {
+        python_ptr{retain_object,
+            exchange(location_, as_pyobject(adopt(ptr).release()))}
+            .reset();
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION inline constexpr random_access_reference& operator=(
+        python_ptr<T>&& ptr) const {
+        python_ptr{
+            retain_object, exchange(location_, as_pyobject(ptr.release()))}
+            .reset();
+        return *this;
+    }
+
+    template <pyobj_derived_from<T> U>
+    LEV_HIDE_INSTANTIATION inline constexpr random_access_reference& operator=(
+        python_ptr<U> const& ptr) const {
+        python_ptr{retain_object,
+            exchange(location_, as_pyobject(adopt(ptr).release()))}
+            .reset();
+        return *this;
+    }
+
+    template <pyobj_derived_from<T> U>
+    LEV_HIDE_INSTANTIATION inline constexpr random_access_reference& operator=(
+        python_ptr<U>&& ptr) const {
+        python_ptr{
+            retain_object, exchange(location_, as_pyobject(ptr.release()))}
+            .reset();
+        return *this;
+    }
+
+private:
+    PyObject*& location_;
+};
+} // namespace details
+
+template <pyobj_type T, cast_policy P>
+class random_access_iterator<T, P> {
+    using this_type = random_access_const_iterator;
+
+public:
+    using value_type = unmanaged_ptr<T>;
+    using difference_type = ptrdiff_t;
+    using iterator_concept = std::random_access_iterator_tag;
+
+    LEV_HIDE_INSTANTIATION inline constexpr random_access_iterator() noexcept
+        : location_{nullptr} {}
+    LEV_HIDE_INSTANTIATION explicit inline constexpr random_access_iterator(
+        PyObject** location) noexcept
+        : location_{location} {}
+
+    LEV_HIDE_INSTANTIATION inline constexpr random_access_const_iterator(
+        random_access_const_iterator const&) noexcept = default;
+    LEV_HIDE_INSTANTIATION inline constexpr random_access_const_iterator&
+    operator=(random_access_const_iterator const&) noexcept = default;
+
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline auto
+    operator*() const noexcept {
+        return details::random_access_reference<T, P>(*location_);
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline auto operator[](
+        difference_type idx) const noexcept {
+        return details::random_access_reference<T, P>(location_[idx]);
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type operator+(
+        difference_type offset) const noexcept {
+        return this_type{location_ + offset};
+    }
+
+    LEV_HIDE_INSTANTIATION
+    [[nodiscard]] friend inline constexpr this_type operator+(
+        difference_type offset, this_type const& it) noexcept {
+        return this_type{location_ + offset};
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type operator-(
+        difference_type offset) const noexcept {
+        return this_type{location_ - offset};
+    }
+
+    LEV_HIDE_INSTANTIATION
+    [[nodiscard]] friend inline constexpr difference_type operator-(
+        this_type const& left, this_type const& right) noexcept {
+        return static_cast<base_iterator const&>(left) -
+            static_cast<base_iterator const&>(right);
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type& operator+=(
+        difference_type offset) noexcept {
+        location_ += offset;
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type& operator-=(
+        difference_type offset) noexcept {
+        location_ -= offset;
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type&
+    operator++() noexcept {
+        ++location_;
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type operator++(
+        int) noexcept {
+        this_type before = *this;
+        ++location_;
+        return before;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type&
+    operator--() noexcept {
+        --location_;
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type operator--(
+        int) noexcept {
+        this_type before = *this;
+        --location_;
+        return before;
+    }
+
+    LEV_HIDE_INSTANTIATION inline constexpr
+    operator random_access_const_iterator<T>() {
+        return random_access_const_iterator<T>{location_};
+    }
+
+private:
+    PyObject** location_;
+};
+
+template <pyobj_type T, cast_policy P>
+class random_access_const_iterator<T, P> {
+    using this_type = random_access_const_iterator;
+
+public:
+    using value_type = unmanaged_ptr<T>;
+    using difference_type = ptrdiff_t;
+    using iterator_concept = std::random_access_iterator_tag;
+
+    LEV_HIDE_INSTANTIATION inline constexpr random_access_const_iterator() noexcept
+        : location_{nullptr} {}
+    LEV_HIDE_INSTANTIATION explicit inline constexpr random_access_const_iterator(
+        PyObject* const* location) noexcept
+        : location_{location} {}
+
+    LEV_HIDE_INSTANTIATION inline constexpr random_access_const_iterator(
+        random_access_const_iterator const&) noexcept = default;
+    LEV_HIDE_INSTANTIATION inline constexpr random_access_const_iterator&
+    operator=(random_access_const_iterator const&) noexcept = default;
+
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline auto
+    operator*() const noexcept {
+        return dispatch_cast<T, P>(*location_);
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline auto operator[](
+        difference_type idx) const noexcept {
+        return dispatch_cast<T, P>(location_[idx]);
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type operator+(
+        difference_type offset) const noexcept {
+        return this_type{location_ + offset};
+    }
+
+    LEV_HIDE_INSTANTIATION
+    [[nodiscard]] friend inline constexpr this_type operator+(
+        difference_type offset, this_type const& it) noexcept {
+        return this_type{location_ + offset};
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type operator-(
+        difference_type offset) const noexcept {
+        return this_type{location_ - offset};
+    }
+
+    LEV_HIDE_INSTANTIATION
+    [[nodiscard]] inline constexpr difference_type operator-(
+        this_type const& right) noexcept {
+        return left.location_ - right.location_;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type& operator+=(
+        difference_type offset) noexcept {
+        location_ += offset;
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type& operator-=(
+        difference_type offset) noexcept {
+        location_ -= offset;
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type&
+    operator++() noexcept {
+        ++location_;
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type operator++(
+        int) noexcept {
+        this_type before = *this;
+        ++location_;
+        return before;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type&
+    operator--() noexcept {
+        --location_;
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type operator--(
+        int) noexcept {
+        this_type before = *this;
+        --location_;
+        return before;
+    }
+
+private:
+    PyObject* const* location_;
+}
+
+} // namespace py
+} // namespace lev

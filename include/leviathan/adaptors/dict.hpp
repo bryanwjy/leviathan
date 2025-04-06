@@ -111,12 +111,10 @@ public:
 
     LEV_HIDE_INSTANTIATION explicit inline constexpr iterator(
         unmanaged_ptr<PyDictObject> ptr) noexcept
-        : instance_{ptr}
-        , pos_{0} {}
+        : iterator{ptr, 0} {}
     LEV_HIDE_INSTANTIATION explicit inline constexpr iterator(
         end_tag_t, unmanaged_ptr<PyDictObject> ptr) noexcept
-        : instance_{ptr}
-        , pos_{-1} {}
+        : iterator{ptr, -1} {}
 
     LEV_HIDE_INSTANTIATION inline constexpr iterator() noexcept = default;
 
@@ -183,21 +181,16 @@ class const_iterator {
 public:
     LEV_HIDE_INSTANTIATION explicit inline constexpr const_iterator(
         unmanaged_ptr<PyDictObject> ptr) noexcept
-        : instance_{ptr}
-        , pos_{0} {}
+        : const_iterator{ptr, 0} {}
     LEV_HIDE_INSTANTIATION explicit inline constexpr const_iterator(
         end_tag_t, unmanaged_ptr<PyDictObject> ptr) noexcept
-        : instance_{ptr}
-        , pos_{-1} {}
+        : const_iterator{ptr, -1} {}
+
     using value_type = std::pair<unmanaged_ptr<Key>, unmanaged_ptr<T>>;
     using difference_type = ptrdiff_t;
     using iterator_concept = std::forward_iterator_tag;
 
     LEV_HIDE_INSTANTIATION inline constexpr const_iterator() noexcept = default;
-
-    operator const_iterator<Key, T>() const noexcept {
-        return const_iterator<Key, T>{instance_};
-    }
 
     LEV_HIDE_INSTANTIATION [[nodiscard]] inline value_type
     operator*() const noexcept {
@@ -247,19 +240,14 @@ template <typename T, typename K>
 LEV_HIDE_INSTANTIATION inline auto find(
     unmanaged_ptr<PyDictObject> dict, unmanaged_ptr<K> key) noexcept {
     LEV_ASSERT(key);
-    auto const hasher = Py_TYPE(key)->tp_hash;
-    if (!hasher) {
-        return T{end_tag, dict};
-    }
-
     exception_checkpoint _;
-    auto const hash = hasher(key);
-    if (hash == -1) {
+    auto const value = hash(key);
+    if (value == -1) {
         return T{end_tag, dict};
     }
 
     [[maybe_unused]] PyObject* unused = nullptr;
-    auto const idx = dict->ma_keys->dk_lookup(dict, key, hash, &unused);
+    auto const idx = dict->ma_keys->dk_lookup(dict, key, value, &unused);
     if (idx < 0) {
         return T{end_tag, dict};
     }
@@ -351,7 +339,7 @@ public:
     }
 
     LEV_HIDE_INSTANTIATION inline auto begin() const LEV_LIFETIMEBOUND {
-        return const_iterator{instance_};
+        return instance_ ? const_iterator{instance_} : end();
     }
 
     LEV_HIDE_INSTANTIATION inline auto end() const LEV_LIFETIMEBOUND {
@@ -595,7 +583,7 @@ public:
     template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V, bool Mutable>
     requires (!M || Mutable)
     LEV_HIDE_INSTANTIATION inline constexpr basic_dict_view(
-        basic_dict<K, V, Mutable> const& other) noexcept
+        basic_dict<K, V, Mutable> const& other LEV_LIFETIMEBOUND) noexcept
         : instance_{other.instance()} {
         if constexpr (M) {
             LEV_ASSERT(instance_);
@@ -780,7 +768,7 @@ public:
     }
 
 private:
-    python_ptr<PyDictObject> instance_;
+    unmanaged_ptr<PyDictObject> instance_;
 };
 
 } // namespace py

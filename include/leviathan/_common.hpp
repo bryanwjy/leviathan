@@ -43,17 +43,38 @@
 #if __has_cpp_attribute(msvc::lifetimebound)
 #  define LEV_LIFETIMEBOUND [[msvc::lifetimebound]]
 #elif __has_cpp_attribute( \
-    clang::lifetimebound) /* UTL_HAS_CPP_ATTRIBUTE(msvc::lifetimebound) */
+    clang::lifetimebound) /* LEV_HAS_CPP_ATTRIBUTE(msvc::lifetimebound) */
 #  define LEV_LIFETIMEBOUND [[clang::lifetimebound]]
 #elif __has_cpp_attribute( \
-    gnu::lifetimebound) /* UTL_HAS_CPP_ATTRIBUTE(msvc::lifetimebound) */
+    gnu::lifetimebound) /* LEV_HAS_CPP_ATTRIBUTE(msvc::lifetimebound) */
 #  define LEV_LIFETIMEBOUND [[gnu::lifetimebound]]
 #elif __has_attribute( \
-    __lifetimebound__) /* UTL_HAS_CPP_ATTRIBUTE(msvc::lifetimebound) */
+    __lifetimebound__) /* LEV_HAS_CPP_ATTRIBUTE(msvc::lifetimebound) */
 #  define LEV_LIFETIMEBOUND __attribute__((__lifetimebound__))
 #else
 #  define LEV_LIFETIMEBOUND
-#endif /* UTL_HAS_CPP_ATTRIBUTE(msvc::lifetimebound) */
+#endif /* LEV_HAS_CPP_ATTRIBUTE(msvc::lifetimebound) */
+
+// TODO: Look into integrating with UTL's configuration library
+#if __has_cpp_attribute(gnu::pure)
+#  define LEV_PURE [[gnu::pure]]
+#elif __has_cpp_attribute(clang::pure)
+#  define LEV_PURE [[clang::pure]]
+#elif __has_cpp_attribute(msvc::pure)
+#  define LEV_PURE [[msvc::pure]]
+#else
+#  define LEV_PURE
+#endif
+
+#if __has_cpp_attribute(gnu::const)
+#  define LEV_CONST [[gnu::const]]
+#elif __has_cpp_attribute(clang::const)
+#  define LEV_CONST [[clang::const]]
+#elif __has_cpp_attribute(msvc::const)
+#  define LEV_CONST [[msvc::const]]
+#else
+#  define LEV_CONST
+#endif
 
 #ifdef __GNUC__ // GCC 4.8+, Clang, Intel and other compilers compatible with
                 // GCC (-std=c++0x or above)
@@ -68,3 +89,35 @@
 #define LEV_TRY try
 #define LEV_CATCH(...) catch (__VA_ARGS__)
 #define LEV_RETHROW() throw
+
+#ifdef _LIBCPP_ABI_NAMESPACE
+#  define LEV_STD_ABI_NAMESPACE_BEGIN inline namespace _LIBCPP_ABI_NAMESPACE {
+#  define LEV_STD_ABI_NAMESPACE_END }
+#elif defined(_GLIBCXX_BEGIN_NAMESPACE_VERSION)
+#  define LEV_STD_ABI_NAMESPACE_BEGIN _GLIBCXX_BEGIN_NAMESPACE_VERSION
+#  define LEV_STD_ABI_NAMESPACE_END _GLIBCXX_END_NAMESPACE_VERSION
+#endif
+
+#ifndef LEV_STD_ABI_NAMESPACE_BEGIN
+#  define LEV_STD_ABI_NAMESPACE_BEGIN
+#  define LEV_STD_ABI_NAMESPACE_END
+#endif
+
+#ifndef LEV_DISABLE_UNSAFE_API_WARNINGS
+#  define LEV_UNSAFE_API                                                    \
+      [[deprecated("This API relies on internal Python implementation and " \
+                   "may break depending on Python configuration")]]
+#else
+#  define LEV_UNSAFE_API
+#endif
+
+/* extern C++ for MSVC > C++20, no effect anywhere else */
+#define LEV_STD_NAMESPACE_BEGIN                                              \
+    LEV_EXTERN_CXX_BEGIN namespace LEV_ATTRIBUTE(TYPE_VISIBILITY("default")) \
+        std {                                                                \
+        LEV_STD_ABI_NAMESPACE_BEGIN
+
+#define LEV_STD_NAMESPACE_END \
+    LEV_STD_ABI_NAMESPACE_END \
+    }                         \
+    LEV_EXTERN_CXX_END

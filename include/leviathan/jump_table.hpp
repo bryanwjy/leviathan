@@ -70,7 +70,7 @@ class LEV_API jump_table<T, Ns...> {
     using result_type_t = typename result_type<F, T>::type;
 
     template <typename F, typename... Args>
-    requires (std::invocable<F, T, Args...>)
+    requires std::invocable<F, T, Args...>
     LEV_HIDE_INSTANTIATION static constexpr decltype(auto) default_(
         F&& callable, T const& value,
         Args&&... args) noexcept(std::is_nothrow_invocable_v<F, T, Args...>) {
@@ -97,7 +97,7 @@ class LEV_API jump_table<T, Ns...> {
     }
 
     template <size_t I, typename F, typename... Args>
-    requires (std::invocable<F, ith_type<I>, Args...>)
+    requires std::invocable<F, ith_type<I>, Args...>
     LEV_HIDE_INSTANTIATION static constexpr decltype(auto) case_(F&& callable,
         T const&,
         Args&&... args) noexcept(std::is_nothrow_invocable_v<F, ith_type<I>>) {

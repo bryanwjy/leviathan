@@ -151,7 +151,7 @@ public:
             return return_type{static_cast<return_underlying>(
                 (storage_ >> Offset) & (one_at(width) - 1))};
         } else {
-            static_assert(always_false<return_type>(), "Unsupported");
+            static_assert(always_false<return_type>(), "Currently unsupported");
         }
     }
 

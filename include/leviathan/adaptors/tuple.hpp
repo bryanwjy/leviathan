@@ -1,6 +1,7 @@
 // Copyright 2025, Bryan Wong
 
 #include "leviathan/adaptors/common.hpp"
+#include "leviathan/adaptors/random_access_iterator.hpp"
 #include "leviathan/pointer.hpp"
 
 #include <array>
@@ -35,19 +36,18 @@ LEV_HIDDEN constexpr char const* size_mismatch_message_v =
 LEV_HIDDEN constexpr char const* invalid_type_message_v =
     "Tuple-Adaptor element type mismatch";
 
-std::span<PyObject* const> items(
+LEV_HIDDEN std::span<PyObject* const> items(
     unmanaged_ptr<PyTupleObject> tuple, size_t size) noexcept {
-    // In C++, performing index operations on ob_items for indices > 1 is UB
+    // In C++, performing index operations on ob_items for indices > 0 is UB
     LEV_ASSERT(tuple);
     LEV_ASSERT(size > 0);
     // The following is a poor man's std::start_lifetime_as_array to "reboot"
     // the lifetime of the array because PyTupleObject defines it as a
     // PyObject*[1] member
 
-    // Unsure: std::launder doesn't work here since the array is a subobject of
-    // PyTupleObject
+    // Unknown: std::launder may work?
     PyObject** ptr = reinterpret_cast<PyObject**>(
-        memmove(ptr->ob_item, ptr->ob_item, size * sizeof(PyObject*)));
+        memmove(tuple->ob_item, tuple->ob_item, size * sizeof(PyObject*)));
 
     // See intro.object.12
     // pointer arithmetic iteration forces creation of the array of the
@@ -66,7 +66,7 @@ std::span<PyObject* const> items(
 }
 
 template <typename... Ts>
-LEV_HIDE_INSTANTIATION static std::span<PyObject* const, sizeof...(Ts)>
+LEV_HIDE_INSTANTIATION std::span<PyObject* const, sizeof...(Ts)>
 instance_to_span(unmanaged_ptr<PyTupleObject> ptr) {
     using span_type = std::span<PyObject* const, sizeof...(Ts)>;
     static constexpr auto E = sizeof...(Ts);
@@ -104,7 +104,7 @@ instance_to_span(unmanaged_ptr<PyTupleObject> ptr) {
 }
 
 template <typename T, size_t E>
-LEV_HIDE_INSTANTIATION static std::span<PyObject* const, E> instance_to_span(
+LEV_HIDE_INSTANTIATION std::span<PyObject* const, E> instance_to_span(
     unmanaged_ptr<PyTupleObject> ptr) {
     using span_type = std::span<PyObject* const, E>;
     if constexpr (E > 0) {
@@ -135,11 +135,10 @@ LEV_HIDE_INSTANTIATION static std::span<PyObject* const, E> instance_to_span(
             return [&]<size_t... Is>(std::index_sequence<Is...>) {
                 return (... && dynamic_ptr_cast<T>(items[Is]));
             }(std::make_index_sequence<E>{});
-        } else {
-            return std::ranges::all_of(items, [](PyObject* ptr) {
-                return dynamic_ptr_cast<T>(ptr) != nullptr;
-            });
         }
+
+        // Don't check for dynamic extent
+        return true;
     }();
 
     if (!types_valid) {
@@ -149,91 +148,6 @@ LEV_HIDE_INSTANTIATION static std::span<PyObject* const, E> instance_to_span(
 
     return span_type{items};
 }
-
-template <pyobj_type T, typename Span>
-class transforming_iterator : typename Span::const_iterator {
-    using base_iterator = typename Span::const_iterator;
-
-public:
-    using value_type = unmanaged_ptr<T>;
-    using difference_type = ptrdiff_t;
-    using iterator_concept = std::random_access_iterator_tag;
-
-    using base_iterator::base_iterator;
-
-    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline auto
-    operator*() const noexcept {
-        return static_ptr_cast<T>(base_iterator::operator*());
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline auto operator[](
-        size_t idx) const noexcept {
-        return static_ptr_cast<T>(base_iterator::operator[](idx));
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator
-    operator+(difference_type offset) const noexcept {
-        return transforming_iterator{base_iterator::base() + offset};
-    }
-
-    LEV_HIDE_INSTANTIATION
-    [[nodiscard]] friend inline constexpr transforming_iterator operator+(
-        difference_type offset, transforming_iterator const& it) noexcept {
-        return transforming_iterator{it.base() + offset};
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator
-    operator-(difference_type offset) const noexcept {
-        return transforming_iterator{base_iterator::base() - offset};
-    }
-
-    LEV_HIDE_INSTANTIATION
-    [[nodiscard]] friend inline constexpr difference_type operator-(
-        transforming_iterator const& left,
-        transforming_iterator const& right) noexcept {
-        return static_cast<base_iterator const&>(left) -
-            static_cast<base_iterator const&>(right);
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator&
-    operator+=(difference_type offset) noexcept {
-        static_cast<base_iterator&>(*this) += offset;
-        return *this;
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator&
-    operator-=(difference_type offset) noexcept {
-        static_cast<base_iterator&>(*this) -= offset;
-        return *this;
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator&
-    operator++() noexcept {
-        ++static_cast<base_iterator&>(*this);
-        return *this;
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator
-    operator++(int) noexcept {
-        transforming_iterator before = *this;
-        ++static_cast<base_iterator&>(*this);
-        return before;
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator&
-    operator--() noexcept {
-        --static_cast<base_iterator&>(*this);
-        return *this;
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator
-    operator--(int) noexcept {
-        transforming_iterator before = *this;
-        --static_cast<base_iterator&>(*this);
-        return before;
-    }
-};
-
 } // namespace details::tuple
 
 template <pyobj_type... Ts>
@@ -284,41 +198,43 @@ public:
         , span_{other.span()} {}
 
     template <pyobj_derived_from<Ts>... Us>
-    LEV_HIDE_INSTANTIATION explicit(sizeof...(Vs) > 0) inline tuple(
-        tuple<Us...>&& other) noexcept
+    LEV_HIDE_INSTANTIATION inline tuple(tuple<Us...>&& other) noexcept
         : instance_{std::move(other.instance_)}
         , span_{other.span()} {}
 
-    LEV_HIDE_INSTANTIATION inline constexpr bool empty() const noexcept {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr bool
+    empty() const noexcept {
         return sizeof...(Ts) == 0;
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr size_t size() const noexcept {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr size_t
+    size() const noexcept {
         return sizeof...(Ts);
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr unmanaged_ptr<PyTupleObject>
+    LEV_HIDE_INSTANTIATION
+    LEV_PURE [[nodiscard]] inline constexpr unmanaged_ptr<PyTupleObject>
     instance() const noexcept LEV_LIFETIMEBOUND {
         return instance_.get();
     }
 
-    LEV_HIDE_INSTANTIATION inline span_type
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline span_type
     span() const noexcept LEV_LIFETIMEBOUND {
         return span_;
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard]] friend unmanaged_ptr<tuple_element_t<I, typelist<Ts...>>>
-        get(tuple const& tuple) noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION [[LEV_PURE,
+        nodiscard]] friend unmanaged_ptr<tuple_element_t<I, typelist<Ts...>>>
+    get(tuple const& tuple) noexcept LEV_LIFETIMEBOUND {
         using target_type = tuple_element_t<I, typelist<Ts...>>;
         unmanaged_ptr<PyObject*> data(tuple.span_[I]);
         return static_ptr_cast<target_type>(data);
     }
 
     template <typename U>
-    requires (1 == template_count_t<U, typelist<Ts...>>)
-    LEV_HIDE_INSTANTIATION [[nodiscard]] friend unmanaged_ptr<U> get(
+    requires (1 == template_count_v<U, typelist<Ts...>>)
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] friend unmanaged_ptr<U> get(
         tuple const& tuple) noexcept LEV_LIFETIMEBOUND {
         unmanaged_ptr<PyObject*> data(
             tuple.span_[template_index_v<U, typelist<Ts...>>]);
@@ -364,36 +280,39 @@ public:
         : instance_{other.instance()}
         , span_{other.span()} {}
 
-    LEV_HIDE_INSTANTIATION inline unmanaged_ptr<PyTupleObject>
+    LEV_HIDE_INSTANTIATION
+    LEV_PURE [[nodiscard]] inline unmanaged_ptr<PyTupleObject>
     instance() const noexcept {
         return instance_;
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr bool empty() const noexcept {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr bool
+    empty() const noexcept {
         return span_.empty();
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr size_t size() const noexcept {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr size_t
+    size() const noexcept {
         return span_.size();
     }
 
-    LEV_HIDE_INSTANTIATION inline span_type
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline span_type
     span() const noexcept LEV_LIFETIMEBOUND {
         return span_;
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard]] friend unmanaged_ptr<tuple_element_t<I, typelist<Ts...>>>
-        get(tuple const& tuple) noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION [[LEV_PURE,
+        nodiscard]] friend unmanaged_ptr<tuple_element_t<I, typelist<Ts...>>>
+    get(tuple const& tuple) noexcept LEV_LIFETIMEBOUND {
         using target_type = tuple_element_t<I, typelist<Ts...>>;
         unmanaged_ptr<PyObject*> data(tuple.span_[I]);
         return static_ptr_cast<target_type>(data);
     }
 
     template <typename U>
-    requires (1 == template_count_t<U, typelist<Ts...>>)
-    LEV_HIDE_INSTANTIATION [[nodiscard]] friend unmanaged_ptr<U> get(
+    requires (1 == template_count_v<U, typelist<Ts...>>)
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] friend unmanaged_ptr<U> get(
         tuple const& tuple) noexcept LEV_LIFETIMEBOUND {
         unmanaged_ptr<PyObject*> data(
             tuple.span_[template_index_v<U, typelist<Ts...>>]);
@@ -411,13 +330,17 @@ class LEV_API array {
     template <typename T, size_t E>
     friend array;
 
+    static constexpr auto cast_type =
+        E == dynamic_extent ? cast_policy::safe : cast_policy::unsafe;
+
 public:
     using value_type = unmanaged_ptr<T>;
     using size_type = size_t;
     using difference_type = ptrdiff_t;
-    using const_iterator =
-        typename details::tuple::transforming_iterator<T, span_type>;
+    using const_iterator = random_access_const_iterator<T, cast_type>;
     using iterator = const_iterator;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+    using reverse_iterator = std::reverse_iterator<iterator>;
 
     LEV_HIDE_INSTANTIATION constexpr inline array(
         array const&) noexcept = default;
@@ -572,40 +495,77 @@ public:
         LEV_ASSERT(empty() || instance_);
     }
 
-    LEV_HIDE_INSTANTIATION inline auto begin() const LEV_LIFETIMEBOUND {
-        return span_.begin();
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
+    begin() const LEV_LIFETIMEBOUND {
+        return iterator{span_.data()};
     }
 
-    LEV_HIDE_INSTANTIATION inline auto end() const LEV_LIFETIMEBOUND {
-        return span_.end();
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
+    end() const LEV_LIFETIMEBOUND {
+        return iterator{span_.data() + span_.size()};
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr bool empty() const noexcept {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
+    cbegin() const LEV_LIFETIMEBOUND {
+        return const_iterator{span_.data()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
+    cend() const LEV_LIFETIMEBOUND {
+        return const_iterator{span_.data() + span_.size()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
+    rbegin() const LEV_LIFETIMEBOUND {
+        return reverse_iterator{end()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
+    rend() const LEV_LIFETIMEBOUND {
+        return reverse_iterator{begin()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
+    crbegin() const LEV_LIFETIMEBOUND {
+        return const_reverse_iterator{end()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
+    crend() const LEV_LIFETIMEBOUND {
+        return const_reverse_iterator{begin()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr bool
+    empty() const noexcept {
         return span_.empty();
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr size_t size() const noexcept {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr size_t
+    size() const noexcept {
         return span_.size();
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr unmanaged_ptr<PyTupleObject>
+    LEV_HIDE_INSTANTIATION
+    LEV_PURE [[nodiscard]] inline constexpr unmanaged_ptr<PyTupleObject>
     instance() const noexcept LEV_LIFETIMEBOUND {
         return instance_.get();
     }
 
-    LEV_HIDE_INSTANTIATION inline span_type
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr span_type
     span() const noexcept LEV_LIFETIMEBOUND {
         return span_;
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] constexpr unmanaged_ptr<T> operator[](
+    LEV_HIDE_INSTANTIATION
+    LEV_PURE [[nodiscard]] inline constexpr unmanaged_ptr<T> operator[](
         size_t idx) const noexcept {
         return static_ptr_cast<T>(span_[idx]);
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] friend unmanaged_ptr<T> get(
-        array const& array) noexcept LEV_LIFETIMEBOUND
+    LEV_HIDE_INSTANTIATION LEV_PURE
+        [[nodiscard]] friend inline constexpr unmanaged_ptr<T>
+        get(array const& array) noexcept LEV_LIFETIMEBOUND
     requires (E != dynamic_extent)
     {
         return static_ptr_cast<T>(array.span_[I]);
@@ -619,14 +579,17 @@ private:
 template <pyobj_type T, size_t E>
 class LEV_API array_view {
     using span_type = std::span<PyObject* const, E>;
+    static constexpr auto cast_type =
+        E == dynamic_extent ? cast_policy::safe : cast_policy::unsafe;
 
 public:
     using value_type = unmanaged_ptr<T>;
     using size_type = size_t;
     using difference_type = ptrdiff_t;
-    using const_iterator =
-        typename details::tuple::transforming_iterator<T, span_type>;
+    using const_iterator = random_access_const_iterator<T, cast_type>;
     using iterator = const_iterator;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+    using reverse_iterator = std::reverse_iterator<iterator>;
 
     LEV_HIDE_INSTANTIATION constexpr inline array_view(
         array_view const&) noexcept = default;
@@ -738,42 +701,74 @@ public:
         LEV_ASSERT(empty() || instance_);
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline auto begin() const {
-        return span_.begin();
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
+    begin() const LEV_LIFETIMEBOUND {
+        return iterator{span_.data()};
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline auto end() const {
-        return span_.end();
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
+    end() const LEV_LIFETIMEBOUND {
+        return iterator{span_.data() + span_.size()};
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr bool
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
+    cbegin() const LEV_LIFETIMEBOUND {
+        return const_iterator{span_.data()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
+    cend() const LEV_LIFETIMEBOUND {
+        return const_iterator{span_.data() + span_.size()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
+    rbegin() const LEV_LIFETIMEBOUND {
+        return reverse_iterator{end()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
+    rend() const LEV_LIFETIMEBOUND {
+        return reverse_iterator{begin()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
+    crbegin() const LEV_LIFETIMEBOUND {
+        return const_reverse_iterator{end()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
+    crend() const LEV_LIFETIMEBOUND {
+        return const_reverse_iterator{begin()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr bool
     empty() const noexcept {
         return span_.empty();
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr size_t
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr size_t
     size() const noexcept {
         return span_.size();
     }
 
     LEV_HIDE_INSTANTIATION
-    [[nodiscard]] inline constexpr unmanaged_ptr<PyTupleObject>
+    LEV_PURE [[nodiscard]] inline constexpr unmanaged_ptr<PyTupleObject>
     instance() const noexcept {
         return instance_.get();
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline span_type
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline span_type
     span() const noexcept {
         return span_;
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] constexpr unmanaged_ptr<T> operator[](
-        size_t idx) const noexcept {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] constexpr unmanaged_ptr<T>
+    operator[](size_t idx) const noexcept {
         return static_ptr_cast<T>(span_[idx]);
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] friend unmanaged_ptr<T> get(
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] friend unmanaged_ptr<T> get(
         array_view const& view) noexcept
     requires (E != dynamic_extent)
     {
@@ -781,7 +776,7 @@ public:
     }
 
 private:
-    python_ptr<PyTupleObject> instance_;
+    unmanaged_ptr<PyTupleObject> instance_;
     span_type span_;
 };
 } // namespace py

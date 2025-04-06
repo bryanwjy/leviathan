@@ -169,6 +169,22 @@ private:
         error_null_instance();
     }
 
+    static Obj* nothrow_retain(Obj* ptr) {
+        if (ptr != nullptr) {
+            return ptr;
+        }
+
+        return nullptr;
+    }
+
+    static Obj* nothrow_adopt(Obj* ptr) {
+        if (ptr != nullptr) {
+            return py_cast<Obj>(Py_NewRef(as_pyobject(ptr)));
+        }
+
+        return nullptr;
+    }
+
 public:
     using element_type = Obj;
 
@@ -183,10 +199,10 @@ public:
     LEV_HIDE_INSTANTIATION constexpr python_ptr(adopt_t, Obj* ptr)
         : ptr_{adopt(ptr)} {}
 
-    LEV_HIDE_INSTANTIATION constexpr python_ptr(
+    LEV_HIDE_INSTANTIATION explicit constexpr python_ptr(
         retain_t, unmanaged_ptr<Obj> ptr) noexcept
         : ptr_{retain(ptr)} {}
-    LEV_HIDE_INSTANTIATION constexpr python_ptr(
+    LEV_HIDE_INSTANTIATION explicit constexpr python_ptr(
         adopt_t, unmanaged_ptr<Obj> ptr) noexcept
         : ptr_{adopt(ptr)} {}
 
@@ -245,6 +261,28 @@ public:
     LEV_HIDE_INSTANTIATION constexpr unmanaged_ptr<Obj>
     get() const noexcept LEV_LIFETIMEBOUND {
         return ptr_;
+    }
+
+    template <typename U>
+    requires std::is_convertible_v<T*, U*>
+    LEV_HIDE_INSTANTIATION constexpr U* get() const noexcept {
+        return ptr_;
+    }
+
+    template <pyobj_base_of<T> U>
+    LEV_HIDE_INSTANTIATION constexpr U* get() const noexcept {
+        return py_cast<U>(ptr_);
+    }
+
+    template <typename U>
+    requires std::is_convertible_v<T*, U*>
+    LEV_HIDE_INSTANTIATION explicit constexpr operator U*() const noexcept {
+        return ptr_;
+    }
+
+    template <pyobj_base_of<T> U>
+    LEV_HIDE_INSTANTIATION explicit constexpr operator U*() const noexcept {
+        return py_cast<U>(ptr_);
     }
 
     LEV_HIDE_INSTANTIATION [[clang::reinitializes]] unmanaged_ptr<Obj>

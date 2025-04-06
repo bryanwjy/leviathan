@@ -132,5 +132,89 @@ public:
     }
 };
 
+template <pyobj_type T, typename Span>
+class transforming_const_iterator : typename Span::const_iterator {
+    using base_iterator = typename Span::const_iterator;
+
+public:
+    using value_type = unmanaged_ptr<T>;
+    using difference_type = ptrdiff_t;
+    using iterator_concept = std::random_access_iterator_tag;
+
+    using base_iterator::base_iterator;
+
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline auto
+    operator*() const noexcept {
+        return static_ptr_cast<T>(base_iterator::operator*());
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline auto operator[](
+        size_t idx) const noexcept {
+        return static_ptr_cast<T>(base_iterator::operator[](idx));
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator
+    operator+(difference_type offset) const noexcept {
+        return transforming_iterator{base_iterator::base() + offset};
+    }
+
+    LEV_HIDE_INSTANTIATION
+    [[nodiscard]] friend inline constexpr transforming_iterator operator+(
+        difference_type offset, transforming_iterator const& it) noexcept {
+        return transforming_iterator{it.base() + offset};
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator
+    operator-(difference_type offset) const noexcept {
+        return transforming_iterator{base_iterator::base() - offset};
+    }
+
+    LEV_HIDE_INSTANTIATION
+    [[nodiscard]] friend inline constexpr difference_type operator-(
+        transforming_iterator const& left,
+        transforming_iterator const& right) noexcept {
+        return static_cast<base_iterator const&>(left) -
+            static_cast<base_iterator const&>(right);
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator&
+    operator+=(difference_type offset) noexcept {
+        static_cast<base_iterator&>(*this) += offset;
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator&
+    operator-=(difference_type offset) noexcept {
+        static_cast<base_iterator&>(*this) -= offset;
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator&
+    operator++() noexcept {
+        ++static_cast<base_iterator&>(*this);
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator
+    operator++(int) noexcept {
+        transforming_iterator before = *this;
+        ++static_cast<base_iterator&>(*this);
+        return before;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator&
+    operator--() noexcept {
+        --static_cast<base_iterator&>(*this);
+        return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr transforming_iterator
+    operator--(int) noexcept {
+        transforming_iterator before = *this;
+        --static_cast<base_iterator&>(*this);
+        return before;
+    }
+};
+
 } // namespace py
 } // namespace lev

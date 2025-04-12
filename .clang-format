@@ -97,3 +97,7 @@ Macros:
 - LEV_DEF(X, Y, Z)=void X()
 - LEV_DEF(X, Y)=void X()
 - LEV_DEF(X)=void X()
+# - LEV_CONTRACT_PRE(X)=pre(X)
+# - LEV_CONTRACT_POST(X)=post(X)
+
+

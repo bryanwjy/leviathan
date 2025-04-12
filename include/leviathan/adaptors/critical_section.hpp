@@ -1,38 +1,33 @@
 // Copyright 2025, Bryan Wong
 
-#include <Python.h>
+#include "leviathan/utility.hpp"
 
-#include <utility>
+#include <Python.h>
 
 namespace lev {
 namespace py {
 
 namespace details::crtical_section {
-inline bool is_supported_v = requires(PyObject* ptr) { ptr->ob_mutex; };
+template <typename T>
+inline constexpr bool is_supported_v =
+    pyobj_type<T> && requires(T* ptr) { as_pyobject(ptr)->ob_mutex; };
 } // namespace details::crtical_section
 
 class crtical_section {
 public:
     crtical_section(crtical_section const&) = delete;
     crtical_section& operator=(crtical_section const&) = delete;
-    template <pyobj_type T>
-    LEV_HIDE_INSTANTIATION explicit inline constexpr crtical_section(
-        unmanaged_ptr<T> object) noexcept {}
-    template <pyobj_type T1, pyobj_type T2>
-    LEV_HIDE_INSTANTIATION explicit inline constexpr crtical_section(
-        unmanaged_ptr<T1> obj1, unmanaged_ptr<T1> obj2) noexcept {}
 
 #if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 13
-    template <pyobj_type T>
+    template <details::is_supported_v T>
     explicit inline constexpr crtical_section(unmanaged_ptr<T> object) noexcept
-    requires details::is_supported_v
         : section{.one = {}}
         , type_{section_type::one} {
         LEV_ASSERT(object != nullptr);
         PyCriticalSection_Begin(&section_.one, object);
     }
 
-    template <pyobj_type T1, pyobj_type T2>
+    template <details::is_supported_v T1, details::is_supported_v T2>
     explicit inline constexpr crtical_section(
         unmanaged_ptr<T1> obj1, unmanaged_ptr<T2> obj2) noexcept
     requires details::is_supported_v
@@ -67,6 +62,13 @@ private:
         one,
         two
     } type_;
+#else
+    template <pyobj_type T>
+    LEV_HIDE_INSTANTIATION explicit inline constexpr crtical_section(
+        unmanaged_ptr<T> object) noexcept {}
+    template <pyobj_type T1, pyobj_type T2>
+    LEV_HIDE_INSTANTIATION explicit inline constexpr crtical_section(
+        unmanaged_ptr<T1> obj1, unmanaged_ptr<T1> obj2) noexcept {}
 #endif
 };
 

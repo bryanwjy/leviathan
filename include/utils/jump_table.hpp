@@ -4,7 +4,7 @@
 
 #include <concepts>
 
-namespace lev {
+namespace ltl {
 
 template <typename T, T... Ns>
 class jump_table;
@@ -207,4 +207,4 @@ public:
     }
 };
 
-} // namespace lev
+} // namespace ltl

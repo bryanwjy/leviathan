@@ -21,6 +21,8 @@ struct method_flags {
         fastcall = METH_FASTCALL
     };
 
+    using enum values;
+
     LEV_HIDDEN friend constexpr values operator|(
         values lhs, values rhs) noexcept {
         return static_cast<values>(

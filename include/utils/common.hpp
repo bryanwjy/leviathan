@@ -24,16 +24,6 @@
 
 #endif // LEVIATHAN_LIBRARY
 
-#ifndef NDEBUG
-#  include <cassert>
-#  define LEV_ASSERT(...) assert(__VA_ARGS__)
-#else
-#  define LEV_ASSERT(...)                                                   \
-      static_assert(static_cast<decltype(static_cast<bool>(__VA_ARGS__))*>( \
-                        0) == nullptr,                                      \
-          "Invalid assert expression");
-#endif
-
 #ifdef _MSC_VER
 #  define LEV_MSVC msvc::
 #else
@@ -121,3 +111,28 @@
     LEV_STD_ABI_NAMESPACE_END \
     }                         \
     LEV_EXTERN_CXX_END
+
+#define __LTL ::ltl::
+#define __LEV ::lev::
+
+#ifdef __cpp_contracts >= 202502L
+#  define LEV_CONTRACT_PRE(...) pre(__VA_ARGS__)
+#  define LEV_CONTRACT_POST(...) post(__VA_ARGS__)
+#  define LEV_CONTRACT_ASSERT(...) contract_assert(__VA_ARGS__)
+
+#  define LEV_SUPPORTS_CONTRACTS 1
+#else
+#  define LEV_CONTRACT_PRE(...)
+#  define LEV_CONTRACT_POST(...)
+#  define LEV_CONTRACT_ASSERT(...) LEV_ASSERT(__VA_ARGS__)
+#endif
+
+#if !LEV_SUPPORTS_CONTRACTS && !defined(NDEBUG)
+#  include <cassert>
+#  define LEV_ASSERT(...) assert(__VA_ARGS__)
+#else
+#  define LEV_ASSERT(...)                                                   \
+      static_assert(static_cast<decltype(static_cast<bool>(__VA_ARGS__))*>( \
+                        0) == nullptr,                                      \
+          "Invalid assert expression");
+#endif

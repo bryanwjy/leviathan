@@ -14,12 +14,6 @@ struct nothrow_t {
     explicit inline constexpr nothrow_t() noexcept = default;
 };
 LEV_HIDDEN inline constexpr nothrow_t nothrow{};
-struct end_tag_t {
-    LEV_HIDE_INSTANTIATION explicit inline constexpr end_tag_t() noexcept =
-        default;
-};
-
-LEV_HIDDEN inline constexpr end_tag_t end_tag{};
 
 using size_t = decltype(sizeof(0));
 using ptrdiff_t = decltype(static_cast<char*>(0) - static_cast<char*>(0));

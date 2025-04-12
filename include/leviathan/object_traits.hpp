@@ -43,16 +43,16 @@ template <typename AdaptorType>
 struct AdaptorTraits;
 
 template <typename T>
-concept native_pyobj =
-    details::is_aliasable_subobject_of_v<PyObject, std::remove_cv_t<T>>;
-
-template <typename T>
 concept leviathan_pyobj =
     std::derived_from<std::remove_cv_t<T>, object_root> && requires {
         {
             adaptor_traits<std::remove_cv_t<T>>::type_object()
         } noexcept -> std::same_as<PyTypeObject*>;
     };
+
+template <typename T>
+concept native_pyobj =
+    details::is_aliasable_subobject_of_v<PyObject, std::remove_cv_t<T>>;
 
 template <typename T>
 LEV_HIDDEN inline constexpr bool is_opaque_pyobj_v = false;
@@ -79,11 +79,18 @@ concept pyobj_base_of = pyobj_derived_from<D, B>;
 template <typename B, typename D>
 concept pyobj_related_to = pyobj_derived_from<D, B> || pyobj_derived_from<B, D>;
 
-template <typename T>
-PyTypeObject* type_object_v = nullptr;
-
 template <leviathan_pyobj T>
-PyTypeObject* type_object_v<T> =
-    adaptor_traits<std::remove_cv_t<T>>::type_object();
+inline constexpr PyTypeObject* type_object() noexcept {
+    return adaptor_traits<std::remove_cv_t<T>>::type_object();
+}
+
+template <typename T>
+inline constexpr PyTypeObject* type_object() noexcept = delete;
+
+template <typename T>
+concept identifiable_pyobj_type =
+    pyobj_type<T> && (std::same_as<PyObject, std::remove_cv_t<T>> || requires {
+        type_object<std::remove_cv_t<T>>();
+    });
 
 } // namespace lev

@@ -2,13 +2,6 @@
 
 #include "leviathan/adaptors/common.h"
 
-LEV_STD_NAMESPACE_BEGIN
-
-template <typename>
-struct hash;
-
-LEV_STD_NAMESPACE_END
-
 namespace lev {
 namespace py {
 
@@ -19,11 +12,6 @@ enum hash_value : Py_hash_t {
 namespace details {
 void hash(...) noexcept = delete;
 
-template <typename T>
-concept standard_hashable = requires(std::hash<T> hash, T val) {
-    { hash(val) } -> std::same_as<size_t>;
-};
-
 class hash_t {
 public:
     LEV_HIDE_INSTANTIATION explicit inline constexpr hash_t() noexcept =
@@ -31,20 +19,11 @@ public:
 
     template <typename T>
     requires requires(T const& value) {
-        requires not standard_hashable<T>;
         { hash(value) } -> std::convertible_to<hash_value>;
     }
     LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr hash_value operator()(
         T const& value) const noexcept(noexcept(hash(value))) {
         return hash(value);
-    }
-
-    template <standard_hashable T>
-    requires (not pyobj_type<T> && not leviathan_pyobj<T>)
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr hash_value operator()(
-        T const& value) const noexcept(noexcept(hash(value))) {
-        constexpr hash<T> hasher{};
-        return hasher(value);
     }
 
     template <pyobj_type T>

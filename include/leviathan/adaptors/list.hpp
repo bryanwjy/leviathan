@@ -10,6 +10,12 @@
 #include <stdexcept>
 
 namespace lev {
+
+template <>
+inline constexpr PyTypeObject* type_object<PyListObject>() noexcept {
+    return &PyList_Type;
+}
+
 namespace py {
 
 template <typename T, bool Mutable = true>

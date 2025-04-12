@@ -1,6 +1,7 @@
 // Copyright 2025, Bryan Wong
 
-#include "leviathan/adaptors/ownership_policy.hpp"
+#include "leviathan/adaptors/container_options.hpp"
+#include "leviathan/adaptors/hash.hpp"
 #include "leviathan/pointer.hpp"
 
 #include <array>
@@ -9,40 +10,49 @@
 #include <system_error>
 
 namespace lev {
+template <>
+inline constexpr PyTypeObject* type_object<PyDictObject>() noexcept {
+    return &PyDict_Type;
+}
+
 namespace py {
 
-template <typename Key, typename T = PyObject, bool Mutable = true>
+template <typename Key, typename T = PyObject,
+    container_options_type auto P = ownership::owned | access::writable>
 class basic_dict;
-template <typename Key, typename T = PyObject, bool Mutable = true>
-class basic_borrowed_dict;
 
 using dict = basic_dict<PyObject>;
-using const_dict = basic_dict<PyObject, PyObject, false>;
+using readonly_dict =
+    basic_dict<PyObject, PyObject, ownership::owned | access::readonly>;
+using kwargs = basic_readonly_dict<PyASCIIObject>;
 
 template <typename Key, typename T = PyObject>
-using basic_const_dict = basic_dict<Key, T, false>;
-template <typename Key, typename T = PyObject>
-using basic_const_borrowed_dict = basic_borrowed_dict<Key, T, false>;
-
-using borrowed_dict = basic_borrowed_dict<PyObject>;
-using const_borrowed_dict = basic_const_borrowed_dict<PyObject>;
-using kwargs = basic_const_dict<PyASCIIObject>;
-using borrowed_kwargs = basic_const_borrowed_dict<PyASCIIObject>;
+using basic_readonly_dict =
+    basic_dict<Key, T, ownership::owned | access::readonly>;
 
 namespace borrowed {
-
-using dict = borrowed_dict;
-using const_dict = const_borrowed_dict;
-using kwargs = borrowed_kwargs<PyASCIIObject>;
+using dict = __LEV
+    py::basic_dict<PyObject, PyObject, ownership::borrowed | access::writable>;
+using readonly_dict = __LEV
+    py::basic_dict<PyObject, PyObject, ownership::borrowed | access::readonly>;
+using kwargs = __LEV py::basic_dict<PyASCIIObject, PyObject,
+    ownership::borrowed | access::readonly>;
 
 template <typename Key, typename T = PyObject>
-using basic_const_dict = basic_borrowed_dict<Key, T, false>;
+using basic_readonly_dict =
+    __LEV py::basic_dict<Key, T, ownership::borrowed | access::readonly>;
+
 template <typename Key, typename T = PyObject>
-using basic_dict = basic_borrowed_dict<Key, T>;
+using basic_dict =
+    __LEV py::basic_dict<Key, T, ownership::borrowed | access::writable>;
 } // namespace borrowed
 
 namespace details::dict {
 
+/**
+ * Proxy type to assign references of the value pointer in a dictionary
+ * key-value pair
+ */
 template <pyobj_type Key, pyobj_type T>
 class value_reference {
 public:
@@ -65,9 +75,10 @@ protected:
         }
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr unmanaged_ptr<T>
-    get_pointer() const {
-        LEV_ASSERT(value_ != nullptr);
+    LEV_HIDE_INSTANTIATION inline constexpr unmanaged_ptr<T> get_pointer() const
+        noexcept(
+            std::is_convertible_v<unmanaged_ptr<PyObject>, unmanaged_ptr<T>>) {
+        LEV_CONSTRACT_ASSERT(value_ != nullptr);
 
         if constexpr (std::is_convertible_v<unmanaged_ptr<PyObject>,
                           unmanaged_ptr<T>>) {
@@ -77,7 +88,7 @@ protected:
             if (!ptr) {
                 failure<type_error, PyExc_TypeError>(format_cstring(
                     "Unexpected mapped type, Expected=[%s], Found=[%s]",
-                    type_object_v<T>->tp_name, Py_TYPE(value_)->tp_name)
+                    type_object<T>()->tp_name, Py_TYPE(value_)->tp_name)
                                                          .data());
             }
 
@@ -86,7 +97,7 @@ protected:
     }
 
     LEV_HIDE_INSTANTIATION inline constexpr void set_pointer(
-        unmanaged_ptr<T> val) const {
+        unmanaged_ptr<T> val) const LEV_CONSTRACT_PRE(val) {
         LEV_ASSERT(val);
         if (value_ == nullptr) {
             failure<std::runtime_error, PyExc_RuntimeError>(
@@ -99,7 +110,7 @@ protected:
 
     template <pyobj_derived_from<T> U>
     LEV_HIDE_INSTANTIATION inline constexpr void set_pointer(
-        unmanaged_ptr<U> ptr) const {
+        unmanaged_ptr<U> val) const LEV_CONSTRACT_PRE(val) {
         LEV_ASSERT(val);
         if (value_ == nullptr) {
             failure<std::runtime_error, PyExc_RuntimeError>(
@@ -116,6 +127,16 @@ private:
     unmanaged_ptr<PyObject> value_;
 };
 
+struct iterator_sentinel_tag_t {
+    LEV_HIDE_INSTANTIATION explicit inline constexpr iterator_sentinel_tag_t() noexcept =
+        default;
+};
+
+LEV_HIDDEN inline constexpr iterator_sentinel_tag_t iterator_sentinel_tag{};
+
+/**
+ * Dictionary Iterator class
+ */
 template <pyobj_type Key, pyobj_type T>
 class iterator {
     friend basic_dict<Key, T, true>;
@@ -136,13 +157,13 @@ public:
         unmanaged_ptr<PyDictObject> ptr) noexcept
         : iterator{ptr, 0} {}
     LEV_HIDE_INSTANTIATION explicit inline constexpr iterator(
-        end_tag_t, unmanaged_ptr<PyDictObject> ptr) noexcept
+        iterator_sentinel_tag_t, unmanaged_ptr<PyDictObject> ptr) noexcept
         : iterator{ptr, -1} {}
 
     LEV_HIDE_INSTANTIATION inline constexpr iterator() noexcept = default;
 
     LEV_HIDE_INSTANTIATION [[nodiscard]] inline value_type
-    operator*() const noexcept {
+    operator*() const noexcept LEV_CONSTRACT_PRE(instance_&& pos_ != -1) {
         Py_ssize_t pos = pos_;
         PyObject *key, *value;
         PyDict_Next(instance_, pos, &key, &value);
@@ -151,7 +172,8 @@ public:
         };
     }
 
-    LEV_HIDE_INSTANTIATION inline iterator& operator++() noexcept {
+    LEV_HIDE_INSTANTIATION inline iterator& operator++() noexcept
+        LEV_CONSTRACT_PRE(instance_&& pos_ != -1) {
         if (!PyDict_Next(instance_, pos_, nullptr, nullptr)) {
             pos_ = -1;
         }
@@ -179,7 +201,7 @@ public:
     }
 
 private:
-    template <typename T, typename K>
+    template <typename It, typename K>
     LEV_HIDE_INSTANTIATION [[nodiscard]] friend auto find(
         unmanaged_ptr<PyDictObject>, unmanaged_ptr<K>) noexcept;
 
@@ -205,7 +227,7 @@ public:
         unmanaged_ptr<PyDictObject> ptr) noexcept
         : const_iterator{ptr, 0} {}
     LEV_HIDE_INSTANTIATION explicit inline constexpr const_iterator(
-        end_tag_t, unmanaged_ptr<PyDictObject> ptr) noexcept
+        iterator_sentinel_tag_t, unmanaged_ptr<PyDictObject> ptr) noexcept
         : const_iterator{ptr, -1} {}
 
     using value_type = std::pair<unmanaged_ptr<Key>, unmanaged_ptr<T>>;
@@ -215,14 +237,15 @@ public:
     LEV_HIDE_INSTANTIATION inline constexpr const_iterator() noexcept = default;
 
     LEV_HIDE_INSTANTIATION [[nodiscard]] inline value_type
-    operator*() const noexcept {
+    operator*() const noexcept LEV_CONSTRACT_PRE(instance_&& pos_ != -1) {
         Py_ssize_t pos = pos_;
         PyObject *key, *value;
         PyDict_Next(instance_, pos, &key, &value);
         return {key, value};
     }
 
-    LEV_HIDE_INSTANTIATION inline iterator& operator++() noexcept {
+    LEV_HIDE_INSTANTIATION inline iterator& operator++() noexcept
+        LEV_CONSTRACT_PRE(instance_&& pos_ != -1) {
         if (!PyDict_Next(instance_, pos_, nullptr, nullptr)) {
             pos_ = -1;
         }
@@ -253,137 +276,174 @@ private:
     unmanaged_ptr<PyDictObject> instance_;
     Py_ssize_t pos_ = -1;
 
-    template <typename T, typename K>
+    template <typename It, typename K>
     LEV_HIDE_INSTANTIATION [[nodiscard]] friend auto find(
         unmanaged_ptr<PyDictObject>, unmanaged_ptr<K>) noexcept;
 };
 
-template <typename T, typename K>
+template <typename It, typename K>
+requires requires(unmanaged_ptr<K> key) { __LEV py::hash(key) }
 LEV_HIDE_INSTANTIATION inline auto find(
-    unmanaged_ptr<PyDictObject> dict, unmanaged_ptr<K> key) noexcept {
+    unmanaged_ptr<PyDictObject> dict, unmanaged_ptr<K> key) noexcept
+    LEV_CONSTRACT_PRE(dict) LEV_CONSTRACT_PRE(key) {
+    LEV_ASSERT(dict);
     LEV_ASSERT(key);
     exception_checkpoint _;
-    auto const value = hash(key);
+    auto const value = __LEV py::hash(key);
     if (value == -1) {
-        return T{end_tag, dict};
+        return It{iterator_sentinel_tag, dict};
     }
 
     [[maybe_unused]] PyObject* unused = nullptr;
     auto const idx = dict->ma_keys->dk_lookup(dict, key, value, &unused);
     if (idx < 0) {
-        return T{end_tag, dict};
+        return It{iterator_sentinel_tag, dict};
     }
 
-    return T{dict, idx};
+    return It{dict, idx};
 }
 
 } // namespace details::dict
 
-template <pyobj_type Key, pyobj_type T, bool M>
-requires std::same_as<PyObject, T> || requires(unmanaged_ptr<PyObject> ptr) {
-    type_object_v<T>;
-    { dynamic_ptr_cast<T>(ptr) } noexcept;
-}
+template <pyobj_type Key, identifiable_pyobj_type T,
+    container_options_type auto P>
 class basic_dict<Key, T, M> {
     static_assert(
         !leviathan_pyobj<Key> || adaptor_traits<Key>::hashable::value);
-    template <typename, typename, bool>
+    template <typename, typename, auto>
     friend class basic_dict;
 
     using reference_proxy =
         element_reference<details::dict::value_reference<Key, T>>;
+    using options_type = std::remove_cv_t<decltype(P)>;
+    using instance_type = std::conditional_t<
+        with_container_options<options_type, ownership::owned_t>,
+        python_ptr<PyDictObject>, unmanaged_ptr<PyDictObject>>;
+
+    struct private_tag_t {};
+
+    LEV_HIDE_INSTANTIATION inline constexpr basic_dict(
+        private_tag_t, auto&& ptr) noexcept
+    requires with_container_options<options_type, access::writable_t>
+    LEV_CONSTRACT_PRE(ptr) : instance_{std::forward<decltype(ptr)>(ptr)} {
+        // Only assert when mutable
+        // Immutable dict has no operations with side-effects, thus no need
+        // for a stricly non-null pre-condition
+        LEV_ASSERT(instance_);
+    }
 
 public:
     using key_type = unmanaged_ptr<Key>;
     using mapped_type = unmanaged_ptr<T>;
     using value_type = std::pair<unmanaged_ptr<Key> const, unmanaged_ptr<T>>;
-    using reference = std::conditional_t<M,
+    using reference = std::conditional_t<
+        with_container_options<options_type, access::writable>,
         std::pair<unmanaged_ptr<Key> const, reference_proxy>, value_type>;
     using const_reference = value_type;
     using size_type = size_t;
     using difference_type = ptrdiff_t;
     using const_iterator = details::dict::const_iterator<Key, T>;
-    using iterator =
-        std::conditional_t<M, details::dict::iterator<Key, T>, const_iterator>;
+    using iterator = std::conditional_t<
+        with_container_options<options_type, access::writable_t>,
+        details::dict::iterator<Key, T>, const_iterator>;
 
-    LEV_HIDE_INSTANTIATION explicit inline constexpr basic_dict(
+    LEV_HIDE_INSTANTIATION inline constexpr basic_dict(
+        basic_dict const& other) noexcept = default;
+    LEV_HIDE_INSTANTIATION inline constexpr basic_dict(
+        basic_dict&& other) noexcept = default;
+    LEV_HIDE_INSTANTIATION inline constexpr basic_dict& operator=(
+        basic_dict const& other) noexcept = default;
+    LEV_HIDE_INSTANTIATION inline constexpr basic_dict& operator=(
+        basic_dict&& other) noexcept = default;
+
+    LEV_HIDE_INSTANTIATION inline constexpr basic_dict(
         python_ptr<PyDictObject>&& ptr) noexcept
-        : instance_{std::move(ptr)} {
-        if constexpr (M) {
-            LEV_ASSERT(instance_);
-        }
-    }
-    LEV_HIDE_INSTANTIATION explicit inline constexpr basic_dict(
+    requires with_container_options<options_type, access::owned_t>
+        : basic_dict(private_tag, std::move(ptr)) {}
+
+    LEV_HIDE_INSTANTIATION inline constexpr basic_dict(
         python_ptr<PyDictObject> const& ptr) noexcept
-        : instance_{ptr} {
-        if constexpr (M) {
-            LEV_ASSERT(instance_);
-        }
-    }
+        : basic_dict(private_tag, ptr) {}
 
     LEV_HIDE_INSTANTIATION inline constexpr basic_dict(
-        basic_dict const& other) noexcept = default;
-    LEV_HIDE_INSTANTIATION inline constexpr basic_dict(
-        basic_dict&& other) noexcept = default;
-    LEV_HIDE_INSTANTIATION inline constexpr basic_dict& operator=(
-        basic_dict const& other) noexcept = default;
-    LEV_HIDE_INSTANTIATION inline constexpr basic_dict& operator=(
-        basic_dict&& other) noexcept = default;
+        python_ptr<PyDictObject> const& ptr LEV_LIFETIMEBOUND) noexcept
+    requires with_container_options<options_type, ownership::borrowed_t>
+        : basic_dict(private_tag, ptr.get()) {}
 
-    template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V, bool Mutable>
-    requires (!M || Mutable)
-    LEV_HIDE_INSTANTIATION inline constexpr basic_dict(
-        basic_dict<K, V, Mutable> const& other) noexcept
-        : instance_{other.instance_} {
-        if constexpr (M) {
-            LEV_ASSERT(instance_);
-        }
-    }
+    LEV_HIDE_INSTANTIATION explicit inline constexpr basic_dict(
+        unmanaged_ptr<PyDictObject> ptr) noexcept
+        : basic_dict{__LEV adopt(ptr)} {}
 
-    template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V, bool Mutable>
-    requires (!M || Mutable)
     LEV_HIDE_INSTANTIATION inline constexpr basic_dict(
-        basic_dict<K, V, Mutable>&& other) noexcept
-        : instance_{std::move(other.instance_)} {
-        if constexpr (M) {
-            LEV_ASSERT(instance_);
-        }
-    }
+        unmanaged_ptr<PyDictObject> ptr) noexcept
+    requires with_container_options<options_type, ownership::borrowed_t>
+        : basic_dict{ptr} {}
 
-    template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V, bool Mutable>
-    requires (!M || Mutable)
-    LEV_HIDE_INSTANTIATION explicit inline basic_dict(
-        adopt_t tag, basic_borrowed_dict<K, V, Mutable> other) noexcept
-        : instance_{tag, other.instance()} {
-        if constexpr (M) {
-            LEV_ASSERT(instance_);
-        }
-    }
+    template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V,
+        with_container_options<ownership::owned_t> auto Opt>
+    LEV_HIDE_INSTANTIATION inline constexpr basic_dict(
+        basic_dict<K, V, Opt>&& other) noexcept
+    requires with_container_options<options_type, ownership::owned_t>
+        : basic_dict{std::move(other.instance_)} {}
+
+    template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V,
+        with_container_options<ownership::owned_t> auto Opt>
+    LEV_HIDE_INSTANTIATION inline constexpr basic_dict(
+        basic_dict<K, V, Opt> const& other) noexcept
+        : basic_dict{other.instance_} {}
+
+    template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V,
+        with_container_options<ownership::owned_t> auto Opt>
+    LEV_HIDE_INSTANTIATION inline constexpr basic_dict(
+        basic_dict<K, V, Opt> const& other LEV_LIFETIMEBOUND) noexcept
+    requires with_container_options<options_type, ownership::borrowed_t>
+        : basic_dict{other.instance()} {}
+
+    template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V,
+        with_container_options<ownership::borrowed_t> auto Opt>
+    LEV_HIDE_INSTANTIATION explicit inline constexpr basic_dict(
+        basic_dict<K, V, Opt> other) noexcept
+        : basic_dict{__LEV adopt(other.instance())} {}
+
+    template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V,
+        with_container_options<ownership::borrowed_t> auto Opt>
+    LEV_HIDE_INSTANTIATION inline constexpr basic_dict(
+        basic_dict<K, V, Opt> other) noexcept
+    requires with_container_options<options_type, ownership::borrowed_t>
+        : basic_dict{other.instance()} {}
 
     LEV_HIDE_INSTANTIATION inline auto begin() const LEV_LIFETIMEBOUND {
-        return instance_ ? const_iterator{instance_} : end();
+        return cbegin();
     }
 
     LEV_HIDE_INSTANTIATION inline auto end() const LEV_LIFETIMEBOUND {
-        return const_iterator{end_tag, instance_};
+        return cend();
+    }
+
+    LEV_HIDE_INSTANTIATION inline auto cbegin() const LEV_LIFETIMEBOUND {
+        return instance_ ? const_iterator{instance_} : end();
+    }
+
+    LEV_HIDE_INSTANTIATION inline auto cend() const LEV_LIFETIMEBOUND {
+        return const_iterator{iterator_sentinel_tag, instance_};
     }
 
     LEV_HIDE_INSTANTIATION inline auto begin() LEV_LIFETIMEBOUND
-    requires (M)
+    requires with_container_options<options_type, access::writable_t>
     {
         return iterator{instance_};
     }
 
     LEV_HIDE_INSTANTIATION inline auto end() LEV_LIFETIMEBOUND
-    requires (M)
+    requires with_container_options<options_type, access::writable_t>
     {
-        return iterator{end_tag, instance_};
+        return iterator{iterator_sentinel_tag, instance_};
     }
 
     template <pyobj_derived_from<Key> K>
     LEV_HIDE_INSTANTIATION inline auto find(
         unmanaged_ptr<K> key) noexcept LEV_LIFETIMEBOUND
-    requires (M)
+    requires with_container_options<options_type, access::writable_t>
     {
         return details::dict::find<iterator>(instance_.get(), key);
     }
@@ -391,40 +451,47 @@ public:
     template <pyobj_derived_from<Key> K>
     LEV_HIDE_INSTANTIATION inline auto find(
         unmanaged_ptr<K> key) const noexcept LEV_LIFETIMEBOUND {
-        if constexpr (!M) {
+        if constexpr (with_container_options<options_type,
+                          access::readonly_t>) {
             if (!instance_) {
-                return const_iterator{end_tag, instance_};
+                return const_iterator{iterator_sentinel_tag, instance_};
             }
         }
 
         return details::dict::find<const_iterator>(instance_.get(), key);
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline constexpr bool
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr bool
     empty() const noexcept {
         return size() == 0;
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline constexpr size_t
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr size_t
     size() const noexcept {
-        if constexpr (M) {
-            return static_cast<size_t>(PyDict_Size(instance_));
-        } else {
-            return instance_ ? PyDict_Size(instance_) : 0;
-        }
+        return instance_ ? PyDict_Size(instance_) : 0;
     }
 
-    LEV_HIDE_INSTANTIATION
-    [[nodiscard, gnu::pure]] inline constexpr unmanaged_ptr<PyTupleObject>
-    instance() const noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION LEV_PURE
+        [[nodiscard]] inline constexpr unmanaged_ptr<PyDictObject>
+        instance() const noexcept LEV_LIFETIMEBOUND {
+        return instance_.get();
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE
+        [[nodiscard]] inline constexpr unmanaged_ptr<PyDictObject>
+        instance() const noexcept
+    requires with_container_options<options_type, access::borrowed_t>
+    {
         return instance_.get();
     }
 
     template <pyobj_derived_from<Key> K>
     LEV_HIDE_INSTANTIATION inline bool remove(unmanaged_ptr<K> key) noexcept
-    requires (M)
-    {
-        if (PyDict_DelItem(instance_, key) == result_code::success) {
+    requires with_container_options<options_type, access::writable_t>
+    LEV_CONSTRACT_PRE(key) LEV_CONSTRACT_PRE(instance_) {
+        LEV_ASSERT(key);
+        LEV_ASSERT(instance_);
+        if (PyDict_DelItem(instance_, key) == __LEV result_code::success) {
             return true;
         }
 
@@ -434,7 +501,7 @@ public:
 
     template <nothrow_t, pyobj_derived_from<Key> K>
     LEV_HIDE_INSTANTIATION inline bool remove(unmanaged_ptr<K> key) noexcept
-    requires (M)
+    requires with_container_options<options_type, access::writable_t>
     {
         return remove(key);
     }
@@ -442,31 +509,30 @@ public:
     template <pyobj_derived_from<Key> K>
     LEV_HIDE_INSTANTIATION [[nodiscard]] inline reference_proxy at(
         unmanaged_ptr<K> key)
-    requires (M)
-    {
+    requires with_container_options<options_type, access::writable_t>
+    LEV_CONSTRACT_PRE(key) LEV_CONSTRACT_PRE(instance_) {
+        LEV_ASSERT(key);
+        LEV_ASSERT(instance_);
         return reference_proxy{instance_, key, std::as_const(*this).at(key)};
     }
 
     template <nothrow_t Tag, pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline reference_proxy at(
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline reference_proxy at(
         unmanaged_ptr<K> key) noexcept
-    requires (M)
-    {
+    requires with_container_options<options_type, access::writable_t>
+    LEV_CONSTRACT_PRE(key) LEV_CONSTRACT_PRE(instance_) {
+        LEV_ASSERT(key);
+        LEV_ASSERT(instance_);
         return reference_proxy{
             instance_, key, std::as_const(*this).at<Tag>(key)};
     }
 
     template <pyobj_derived_from<Key> K>
     LEV_HIDE_INSTANTIATION [[nodiscard]] inline unmanaged_ptr<T> at(
-        unmanaged_ptr<K> key) const {
+        unmanaged_ptr<K> key) const LEV_CONSTRACT_PRE(key)
+        LEV_CONSTRACT_PRE(instance_) {
         LEV_ASSERT(key);
-
-        if constexpr (M) {
-            if (!instance_) {
-                failure<std::runtime_error, PyExc_ValueError>(
-                    "Invalid dictionary instance");
-            }
-        }
+        LEV_ASSERT(instance_);
 
         auto pyobj = PyDict_GetItemWithError(instance_, key);
         if (PyErr_Occured()) {
@@ -485,7 +551,7 @@ public:
                 failure<type_error, PyExc_TypeError>(format_cstring(
                     "The associated value does not have the "
                     "expected type, Expected=[%s], Retrieved=[%s]",
-                    type_object_v<T>->tp_name, Py_TYPE(pyobj)->tp_name)
+                    type_object<T>()->tp_name, Py_TYPE(pyobj)->tp_name)
                                                          .data());
             }
         }
@@ -494,22 +560,16 @@ public:
     }
 
     template <nothrow_t, pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline unmanaged_ptr<T> at(
-        unmanaged_ptr<K> key) const noexcept {
-        LEV_ASSERT(key);
-        if constexpr (!M) {
-            return instance_
-                ? dynamic_ptr_cast<T>(PyDict_GetItem(instance_, key))
-                : nullptr;
-        } else {
-            return dynamic_ptr_cast<T>(PyDict_GetItem(instance_, key));
-        }
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline unmanaged_ptr<T> at(
+        unmanaged_ptr<K> key) const noexcept LEV_CONSTRACT_PRE(key) {
+        return instance_ ? dynamic_ptr_cast<T>(PyDict_GetItem(instance_, key))
+                         : nullptr;
     }
 
     template <pyobj_derived_from<Key> K>
     LEV_HIDE_INSTANTIATION [[nodiscard]] inline reference_proxy operator[](
         unmanaged_ptr<K> key) noexcept
-    requires (M)
+    requires with_container_options<options_type, access::writable_t>
     {
         LEV_ASSERT(key);
         unmanaged_ptr<PyObject> value =
@@ -520,11 +580,14 @@ public:
     template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V>
     LEV_HIDE_INSTANTIATION inline void set_value(
         unmanaged_ptr<K> key, unmanaged_ptr<V> value)
-    requires (M)
-    {
+    requires with_container_options<options_type, access::writable_t>
+    LEV_CONSTRACT_PRE(key) LEV_CONSTRACT_PRE(value)
+        LEV_CONSTRACT_PRE(instance_) {
         LEV_ASSERT(key);
         LEV_ASSERT(value);
-        if (PyDict_SetItem(instance_, key, value) != result_code::success) {
+        LEV_ASSERT(instance_);
+        if (PyDict_SetItem(instance_, key, value) !=
+            __LEV result_code::success) {
             unhandled_error<std::runtime_error>();
         }
     }
@@ -532,11 +595,14 @@ public:
     template <nothrow_t, pyobj_derived_from<Key> K, pyobj_derived_from<T> V>
     LEV_HIDE_INSTANTIATION inline bool set_value(
         unmanaged_ptr<K> key, unmanaged_ptr<V> value) noexcept
-    requires (M)
-    {
+    requires with_container_options<options_type, access::writable_t>
+    LEV_CONSTRACT_PRE(key) LEV_CONSTRACT_PRE(value)
+        LEV_CONSTRACT_PRE(instance_) {
         LEV_ASSERT(key);
         LEV_ASSERT(value);
-        if (PyDict_SetItem(instance_, key, value) == result_code::success) {
+        LEV_ASSERT(instance_);
+        if (PyDict_SetItem(instance_, key, value) ==
+            __LEV result_code::success) {
             return true;
         }
 
@@ -545,253 +611,7 @@ public:
     }
 
 private:
-    python_ptr<PyDictObject> instance_;
+    instance_type instance_;
 };
-
-template <pyobj_type Key, pyobj_type T, bool M>
-requires std::same_as<PyObject, T> || requires(unmanaged_ptr<PyObject> ptr) {
-    type_object_v<T>;
-    { dynamic_ptr_cast<T>(ptr) } noexcept;
-}
-class basic_borrowed_dict<Key, T, M> {
-    static_assert(
-        !leviathan_pyobj<Key> || adaptor_traits<Key>::hashable::value);
-    template <typename, typename, bool>
-    friend class basic_borrowed_dict;
-
-    using reference_proxy =
-        value_reference<details::dict::value_reference<Key, T>>;
-
-public:
-    using key_type = unmanaged_ptr<Key>;
-    using mapped_type = unmanaged_ptr<T>;
-    using value_type = std::pair<unmanaged_ptr<Key> const, unmanaged_ptr<T>>;
-    using reference = std::conditional_t<M,
-        std::pair<unmanaged_ptr<Key> const, reference_proxy>, value_type>;
-    using const_reference = value_type;
-    using size_type = size_t;
-    using difference_type = ptrdiff_t;
-    using const_iterator = details::dict::const_iterator<Key, T>;
-    using iterator =
-        std::conditional_t<M, details::dict::iterator<Key, T>, const_iterator>;
-
-    LEV_HIDE_INSTANTIATION explicit inline constexpr basic_borrowed_dict(
-        python_ptr<PyDictObject> const& ptr LEV_LIFETIMEBOUND) noexcept
-        : instance_{ptr} {
-        if constexpr (!M) {
-            LEV_ASSERT(instance_);
-        }
-    }
-
-    LEV_HIDE_INSTANTIATION inline constexpr basic_borrowed_dict(
-        basic_borrowed_dict const& other) noexcept = default;
-    LEV_HIDE_INSTANTIATION inline constexpr basic_borrowed_dict(
-        basic_borrowed_dict&& other) noexcept = default;
-    LEV_HIDE_INSTANTIATION inline constexpr basic_borrowed_dict& operator=(
-        basic_borrowed_dict const& other) noexcept = default;
-    LEV_HIDE_INSTANTIATION inline constexpr basic_borrowed_dict& operator=(
-        basic_borrowed_dict&& other) noexcept = default;
-
-    template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V, bool Mutable>
-    requires (!M || Mutable)
-    LEV_HIDE_INSTANTIATION inline constexpr basic_borrowed_dict(
-        basic_borrowed_dict<K, V, Mutable> other) noexcept
-        : instance_{other.instance_} {
-        if constexpr (M) {
-            LEV_ASSERT(instance_);
-        }
-    }
-
-    template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V, bool Mutable>
-    requires (!M || Mutable)
-    LEV_HIDE_INSTANTIATION inline constexpr basic_borrowed_dict(
-        basic_dict<K, V, Mutable> const& other LEV_LIFETIMEBOUND) noexcept
-        : instance_{other.instance()} {
-        if constexpr (M) {
-            LEV_ASSERT(instance_);
-        }
-    }
-
-    LEV_HIDE_INSTANTIATION inline auto begin() const {
-        return const_iterator{instance_};
-    }
-
-    LEV_HIDE_INSTANTIATION inline auto end() const {
-        return const_iterator{end_tag, instance_};
-    }
-
-    LEV_HIDE_INSTANTIATION inline auto begin() { return iterator{instance_}; }
-
-    LEV_HIDE_INSTANTIATION inline auto end() {
-        return iterator{end_tag, instance_};
-    }
-
-    template <pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION inline auto find(unmanaged_ptr<K> key) noexcept
-    requires (M)
-    {
-        return details::dict::find<iterator>(instance_.get(), key);
-    }
-
-    template <pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION inline auto find(
-        unmanaged_ptr<K> key) const noexcept {
-        if constexpr (!M) {
-            if (!instance_) {
-                return const_iterator{end_tag, instance_};
-            }
-        }
-
-        return details::dict::find<const_iterator>(instance_.get(), key);
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline constexpr bool
-    empty() const noexcept {
-        return size() == 0;
-    }
-
-    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline constexpr size_t
-    size() const noexcept {
-        if constexpr (M) {
-            return PyDict_Size(instance_);
-        } else {
-            return instance_ ? PyDict_Size(instance_) : 0;
-        }
-    }
-
-    LEV_HIDE_INSTANTIATION
-    [[nodiscard, gnu::pure]] inline constexpr unmanaged_ptr<PyTupleObject>
-    instance() const noexcept {
-        return instance_.get();
-    }
-
-    template <pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION inline bool remove(unmanaged_ptr<K> key) noexcept
-    requires (M)
-    {
-        if (PyDict_DelItem(instance_, key) == result_code::success) {
-            return true;
-        }
-
-        PyErr_Clear();
-        return false;
-    }
-
-    template <nothrow_t, pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION inline bool remove(unmanaged_ptr<K> key) noexcept
-    requires (M)
-    {
-        return remove(key);
-    }
-
-    template <pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline reference_proxy at(
-        unmanaged_ptr<K> key)
-    requires (M)
-    {
-        return reference_proxy{instance_, key, std::as_const(*this).at(key)};
-    }
-
-    template <nothrow_t Tag, pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline reference_proxy at(
-        unmanaged_ptr<K> key) noexcept
-    requires (M)
-    {
-        return reference_proxy{
-            instance_, key, std::as_const(*this).at<Tag>(key)};
-    }
-
-    template <pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline unmanaged_ptr<T> at(
-        unmanaged_ptr<K> key) const {
-        LEV_ASSERT(key);
-
-        if (!instance_) {
-            failure<std::runtime_error, PyExc_ValueError>(
-                "Key lookup attempted on invalid dictionary instance");
-        }
-
-        auto pyobj = PyDict_GetItemWithError(instance_, key);
-        if (PyErr_Occured()) {
-            unhandled_error<std::runtime_error>();
-        }
-
-        if (pyobj == nullptr) {
-            failure<std::out_of_range, PyExc_ValueError>(
-                "The requested key was not found in the dictionary");
-        }
-
-        auto ptr = dynamic_ptr_cast<T>(pyobj);
-
-        if constexpr (!std::same_as<PyObject, T>) {
-            if (ptr == nullptr) {
-                failure<type_error, PyExc_TypeError>(format_cstring(
-                    "The associated value does not have the "
-                    "expected type, Expected=[%s], Retrieved=[%s]",
-                    type_object_v<T>->tp_name, Py_TYPE(pyobj)->tp_name)
-                                                         .data());
-            }
-        }
-
-        return ptr;
-    }
-
-    template <nothrow_t, pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline unmanaged_ptr<T> at(
-        unmanaged_ptr<K> key) const noexcept {
-        LEV_ASSERT(key);
-        if constexpr (!M) {
-            return instance_
-                ? dynamic_ptr_cast<T>(PyDict_GetItem(instance_, key))
-                : nullptr;
-        } else {
-            return dynamic_ptr_cast<T>(PyDict_GetItem(instance_, key));
-        }
-    }
-
-    template <pyobj_derived_from<Key> K>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline reference_proxy operator[](
-        unmanaged_ptr<K> key) noexcept
-    requires (M)
-    {
-        LEV_ASSERT(key);
-        unmanaged_ptr<PyObject> value =
-            PyDict_SetDefault(instance_, key, Py_None);
-        return reference_proxy{instance_, key, value};
-    }
-
-    template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V>
-    LEV_HIDE_INSTANTIATION inline void set_value(
-        unmanaged_ptr<K> key, unmanaged_ptr<V> value)
-    requires (M)
-    {
-        LEV_ASSERT(key);
-        LEV_ASSERT(value);
-        if (PyDict_SetItem(instance_, key, value) != result_code::success) {
-            unhandled_error<std::runtime_error>();
-        }
-    }
-
-    template <nothrow_t, pyobj_derived_from<Key> K, pyobj_derived_from<T> V>
-    LEV_HIDE_INSTANTIATION inline bool set_value(
-        unmanaged_ptr<K> key, unmanaged_ptr<V> value) noexcept
-    requires (M)
-    {
-        LEV_ASSERT(key);
-        LEV_ASSERT(value);
-
-        exception_checkpoint _;
-        if (PyDict_SetItem(instance_, key, value) == result_code::success) {
-            return true;
-        }
-
-        PyErr_Clear();
-        return false;
-    }
-
-private:
-    unmanaged_ptr<PyDictObject> instance_;
-};
-
 } // namespace py
 } // namespace lev

@@ -12,6 +12,11 @@
 #include <stdexcept>
 
 namespace lev {
+template <>
+inline constexpr PyTypeObject* type_object<PyTupleObject>() noexcept {
+    return &PyTuple_Type;
+}
+
 namespace py {
 
 namespace details::aggregate {
@@ -48,7 +53,7 @@ LEV_HIDDEN std::span<PyObject* const> items(unmanaged_ptr<PyTupleObject> tuple,
 }
 } // namespace details::aggregate
 
-template <pyobj_type... Ts>
+template <identifiable_pyobj_type... Ts>
 class LEV_API tuple_policy {
 public:
     LEV_HIDE_INSTANTIATION static constexpr size_t extent = sizeof...(Ts);
@@ -112,7 +117,7 @@ protected:
         template_index_v<U, tuple_policy>;
 };
 
-template <pyobj_type T, size_t E = dynamic_extent>
+template <identifiable_pyobj_type T, size_t E = dynamic_extent>
 class LEV_API array_policy {
 public:
     using value_type = unmanaged_ptr<T>;
@@ -246,7 +251,7 @@ class LEV_API basic_aggregate<D, P> : public D {
         "Aggregates cannot be mutable");
 
     template <typename, auto>
-    friend basic_aggregate;
+    friend class basic_aggregate;
     struct private_tag_t {};
     LEV_HIDE_INSTANTIATION static constexpr private_tag_t private_tag{};
 
@@ -710,16 +715,30 @@ public:
         size_t idx) const noexcept
     requires details::aggregate::is_array_policy_v<descriptor_type>
     LEV_CONTRACT_PRE(idx < this->size()) {
-        return __LEV static_ptr_cast<typename descriptor_type::element_type>(
-            span_[idx]);
+        if constexpr (descriptor_type::extent != dynamic_extent) {
+            return __LEV
+                static_ptr_cast<typename descriptor_type::element_type>(
+                    span_[idx]);
+        } else {
+            return __LEV
+                dynamic_ptr_cast<typename descriptor_type::element_type>(
+                    span_[idx]);
+        }
     }
 
     LEV_HIDE_INSTANTIATION
     LEV_PURE [[nodiscard]] inline constexpr auto at(size_t idx) const
     requires details::aggregate::is_array_policy_v<descriptor_type>
     LEV_CONTRACT_PRE(idx < this->size()) {
-        return __LEV static_ptr_cast<typename descriptor_type::element_type>(
-            span_[idx]);
+        if constexpr (descriptor_type::extent != dynamic_extent) {
+            return __LEV
+                static_ptr_cast<typename descriptor_type::element_type>(
+                    span_[idx]);
+        } else {
+            return __LEV
+                dynamic_ptr_cast<typename descriptor_type::element_type>(
+                    span_[idx]);
+        }
     }
 
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto

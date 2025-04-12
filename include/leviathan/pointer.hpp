@@ -553,12 +553,12 @@ dynamic_ptr_cast(unmanaged_ptr<From> other) noexcept {
 template <pyobj_type To, pyobj_base_of<To> From>
 requires requires(From* ptr) {
     requires !std::same_as<std::remove_cv_t<To>, std::remove_cv_t<From>>;
-    py::type_object_v<To>;
+    type_object<To>();
     py_cast<To>(ptr);
 }
 LEV_HIDDEN [[nodiscard]] inline details::cast_result_unmanaged_t<From, To>
 dynamic_ptr_cast(unmanaged_ptr<From> other) noexcept {
-    if (other && PyObject_TypeCheck(other.get(), type_object_v<To>)) {
+    if (other && PyObject_TypeCheck(other.get(), type_object<To>())) {
         return py_cast<To>(other.get());
     }
 
@@ -576,11 +576,11 @@ template <pyobj_type To, pyobj_base_of<To> From>
 requires requires(From* ptr) {
     requires !std::same_as<std::remove_cv_t<To>, std::remove_cv_t<From>>;
     requires castable_to<To>;
-    py::type_object_v<To>;
+    type_object<To>();
 }
 LEV_HIDDEN [[nodiscard]] inline details::cast_result_unmanaged_t<From, To>
 exact_ptr_cast(unmanaged_ptr<From> other) noexcept {
-    if (other && type_object_v<To> == Py_TYPE(other)) {
+    if (other && type_object<To>() == Py_TYPE(other)) {
         return py_cast<To>(other.get());
     }
 

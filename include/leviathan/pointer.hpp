@@ -155,35 +155,15 @@ class LEV_API python_ptr<Obj> : pointer_comparable<python_ptr<Obj>> {
     }
 
 private:
-    static Obj* retain(Obj* ptr) {
-        if (ptr != nullptr) {
-            return ptr;
-        }
-
-        error_null_instance();
+    LEV_HIDE_INSTANTIATION static Obj* retain_nonnull(Obj* ptr) noexcept LEV_CONTRACT_PRE(
+        ptr) {
+        LEV_ASSERT(ptr);
+        return ptr;
     }
-    static Obj* adopt(Obj* ptr) {
-        if (ptr != nullptr) {
-            return py_cast<Obj>(Py_NewRef(as_pyobject(ptr)));
-        }
-
-        error_null_instance();
-    }
-
-    static Obj* nothrow_retain(Obj* ptr) {
-        if (ptr != nullptr) {
-            return ptr;
-        }
-
-        return nullptr;
-    }
-
-    static Obj* nothrow_adopt(Obj* ptr) {
-        if (ptr != nullptr) {
-            return py_cast<Obj>(Py_NewRef(as_pyobject(ptr)));
-        }
-
-        return nullptr;
+    LEV_HIDE_INSTANTIATION static Obj* adopt_nonnull(Obj* ptr) noexcept LEV_CONTRACT_PRE(
+        ptr) {
+        LEV_ASSERT(ptr);
+        return py_cast<Obj>(Py_NewRef(as_pyobject(ptr)));
     }
 
 public:
@@ -196,16 +176,16 @@ public:
         : python_ptr{} {}
 
     LEV_HIDE_INSTANTIATION constexpr python_ptr(retain_t, Obj* ptr)
-        : ptr_{retain(ptr)} {}
+        : ptr_{retain_nonnull(ptr)} {}
     LEV_HIDE_INSTANTIATION constexpr python_ptr(adopt_t, Obj* ptr)
-        : ptr_{adopt(ptr)} {}
+        : ptr_{adopt_nonnull(ptr)} {}
 
     LEV_HIDE_INSTANTIATION explicit constexpr python_ptr(
         retain_t, unmanaged_ptr<Obj> ptr) noexcept
-        : ptr_{retain(ptr)} {}
+        : ptr_{retain_nonnull(ptr)} {}
     LEV_HIDE_INSTANTIATION explicit constexpr python_ptr(
         adopt_t, unmanaged_ptr<Obj> ptr) noexcept
-        : ptr_{adopt(ptr)} {}
+        : ptr_{adopt_nonnull(ptr)} {}
 
     LEV_HIDE_INSTANTIATION constexpr python_ptr(
         python_ptr const& other) noexcept
@@ -264,28 +244,6 @@ public:
         return ptr_;
     }
 
-    template <typename U>
-    requires std::is_convertible_v<T*, U*>
-    LEV_HIDE_INSTANTIATION constexpr U* get() const noexcept {
-        return ptr_;
-    }
-
-    template <pyobj_base_of<T> U>
-    LEV_HIDE_INSTANTIATION constexpr U* get() const noexcept {
-        return py_cast<U>(ptr_);
-    }
-
-    template <typename U>
-    requires std::is_convertible_v<T*, U*>
-    LEV_HIDE_INSTANTIATION explicit constexpr operator U*() const noexcept {
-        return ptr_;
-    }
-
-    template <pyobj_base_of<T> U>
-    LEV_HIDE_INSTANTIATION explicit constexpr operator U*() const noexcept {
-        return py_cast<U>(ptr_);
-    }
-
     LEV_HIDE_INSTANTIATION [[clang::reinitializes]] unmanaged_ptr<Obj>
     release() noexcept {
         return exchange(ptr_, nullptr);
@@ -310,7 +268,8 @@ public:
         Py_XDECREF(as_pyobject(exchange(ptr_, adopt(ptr))));
     }
 
-    LEV_HIDE_INSTANTIATION constexpr void swap(python_ptr& other) noexcept {
+    LEV_HIDE_INSTANTIATION [[clang::reinitializes]] constexpr void swap(
+        python_ptr& other) noexcept {
         ptr_ = exchange(other.ptr_, ptr_);
     }
 
@@ -383,19 +342,22 @@ public:
         return *this;
     }
 
-    LEV_HIDE_INSTANTIATION constexpr operator T*() const noexcept {
-        return ptr_;
-    }
-
-    template <typename U>
-    requires std::is_convertible_v<T*, U*>
-    LEV_HIDE_INSTANTIATION constexpr operator U*() const noexcept {
+    LEV_HIDE_INSTANTIATION constexpr
+    operator std::add_pointer_t<T>() const noexcept {
         return ptr_;
     }
 
     template <pyobj_base_of<T> U>
-    LEV_HIDE_INSTANTIATION constexpr operator U*() const noexcept {
+    LEV_HIDE_INSTANTIATION constexpr
+    operator std::add_pointer_t<U>() const noexcept {
         return py_cast<U>(ptr_);
+    }
+
+    template <typename U>
+    requires std::is_convertible_v<T*, U*> && (!pyobj_base_of<U, T>)
+    LEV_HIDE_INSTANTIATION constexpr
+    operator std::add_pointer_t<U>() const noexcept {
+        return ptr_;
     }
 
     LEV_HIDE_INSTANTIATION constexpr explicit operator bool() const noexcept {
@@ -419,23 +381,6 @@ public:
 private:
     Obj* ptr_;
 };
-
-template <pyobj_type T>
-LEV_HIDDEN [[nodiscard]] inline python_ptr<T> adopt(
-    unmanaged_ptr<T> ptr) noexcept {
-    return python_ptr{adopt_object, ptr};
-}
-
-template <pyobj_type T>
-LEV_HIDDEN [[nodiscard]] inline python_ptr<T> adopt(T* ptr) noexcept {
-    return python_ptr{adopt_object, ptr};
-}
-
-template <pyobj_type T>
-LEV_HIDDEN [[nodiscard]] inline python_ptr<T> adopt(
-    python_ptr<T> const& ptr) noexcept {
-    return ptr;
-}
 
 template <typename T>
 void static_ptr_cast(...) noexcept = delete;
@@ -550,10 +495,9 @@ dynamic_ptr_cast(unmanaged_ptr<From> other) noexcept {
     return py_cast<To>(other.get());
 }
 
-template <pyobj_type To, pyobj_base_of<To> From>
+template <identifiable_pyobj_type To, pyobj_base_of<To> From>
 requires requires(From* ptr) {
     requires !std::same_as<std::remove_cv_t<To>, std::remove_cv_t<From>>;
-    type_object<To>();
     py_cast<To>(ptr);
 }
 LEV_HIDDEN [[nodiscard]] inline details::cast_result_unmanaged_t<From, To>
@@ -572,11 +516,10 @@ exact_ptr_cast(unmanaged_ptr<From> other) noexcept {
     return py_cast<To>(other.get());
 }
 
-template <pyobj_type To, pyobj_base_of<To> From>
+template <identifiable_pyobj_type To, pyobj_base_of<To> From>
 requires requires(From* ptr) {
     requires !std::same_as<std::remove_cv_t<To>, std::remove_cv_t<From>>;
     requires castable_to<To>;
-    type_object<To>();
 }
 LEV_HIDDEN [[nodiscard]] inline details::cast_result_unmanaged_t<From, To>
 exact_ptr_cast(unmanaged_ptr<From> other) noexcept {
@@ -587,19 +530,128 @@ exact_ptr_cast(unmanaged_ptr<From> other) noexcept {
     return nullptr;
 }
 
-enum class cast_policy {
-    safe,
-    unsafe
-};
-
-template <pyobj_type T, cast_policy P>
-LEV_HIDE_INSTANTIATION inline constexpr auto dispatch_cast(
-    auto&& ptr) const noexcept {
-    if constexpr (P == cast_policy::safe) {
-        return dynamic_ptr_cast<T>(std::forward<decltype(ptr)>(ptr));
-    } else {
-        return static_ptr_cast<T>(std::forward<decltype(ptr)>(ptr));
-    }
+template <pyobj_type T>
+LEV_HIDDEN [[nodiscard]] inline constexpr python_ptr<T> adopt(
+    unmanaged_ptr<T> ptr) noexcept {
+    return python_ptr{adopt_object, ptr};
 }
+
+template <pyobj_type T>
+LEV_HIDDEN [[nodiscard]] inline constexpr python_ptr<T> adopt(T* ptr) noexcept {
+    return python_ptr{adopt_object, ptr};
+}
+
+template <pyobj_type T>
+LEV_HIDDEN [[nodiscard]] inline constexpr python_ptr<T> adopt(
+    python_ptr<T> const& ptr) noexcept {
+    return ptr;
+}
+
+template <pyobj_type T>
+LEV_HIDDEN [[nodiscard]] inline constexpr python_ptr<T> steal(
+    unmanaged_ptr<T> ptr) noexcept {
+    return python_ptr{retain_object, ptr};
+}
+
+template <pyobj_type T>
+LEV_HIDDEN [[nodiscard]] inline constexpr python_ptr<T> steal(T* ptr) noexcept {
+    return python_ptr{retain_object, ptr};
+}
+
+template <pyobj_type T>
+LEV_HIDDEN [[nodiscard]] inline constexpr python_ptr<T> steal(
+    python_ptr<T>&& ptr) noexcept {
+    return std::move(ptr);
+}
+
+template <pyobj_type T>
+LEV_HIDDEN [[nodiscard]] inline constexpr python_ptr<T> borrow(
+    unmanaged_ptr<T> ptr) noexcept {
+    return unamanage_ptr<T>{ptr};
+}
+
+template <pyobj_type T>
+LEV_HIDDEN [[nodiscard]] inline constexpr python_ptr<T> borrow(
+    T* ptr) noexcept {
+    return unamanage_ptr<T>{ptr};
+}
+
+template <pyobj_type T>
+LEV_HIDDEN [[nodiscard]] inline constexpr python_ptr<T> borrow(
+    python_ptr<T> const& ptr LEV_LIFETIMEBOUND) noexcept {
+    return ptr.get();
+}
+
+template <pyobj_type T, pyobj_derived_from<T> U>
+LEV_HIDDEN [[nodiscard]] inline constexpr python_ptr<T> adopt(
+    unmanaged_ptr<U> ptr) noexcept {
+    return python_ptr{adopt_object, ptr};
+}
+
+template <pyobj_type T, pyobj_derived_from<T> U>
+LEV_HIDDEN [[nodiscard]] inline constexpr python_ptr<T> adopt(U* ptr) noexcept {
+    return python_ptr{adopt_object, ptr};
+}
+
+template <pyobj_type T, pyobj_derived_from<T> U>
+LEV_HIDDEN [[nodiscard]] inline constexpr python_ptr<T> adopt(
+    python_ptr<U> const& ptr) noexcept {
+    return ptr;
+}
+
+template <pyobj_type T, typename U>
+requires std::is_nothrow_convertible_v<U, unmanaged_ptr<T>> &&
+    (!pyobj_derived_from<U, T>)
+LEV_HIDDEN
+    [[nodiscard]] inline constexpr python_ptr<T> adopt(U&& val) noexcept {
+    return adopt<T>(static_cast<unmanaged_ptr<T>>(val));
+}
+
+template <pyobj_type T, pyobj_derived_from<T> U>
+LEV_HIDDEN [[nodiscard]] inline constexpr python_ptr<T> steal(
+    unmanaged_ptr<U> ptr) noexcept {
+    return python_ptr{retain_object, ptr};
+}
+
+template <pyobj_type T, pyobj_derived_from<T> U>
+LEV_HIDDEN [[nodiscard]] inline constexpr python_ptr<T> steal(U* ptr) noexcept {
+    return python_ptr{retain_object, ptr};
+}
+
+template <pyobj_type T, pyobj_derived_from<T> U>
+LEV_HIDDEN [[nodiscard]] inline constexpr python_ptr<T> steal(
+    python_ptr<U>&& ptr) noexcept {
+    return std::move(ptr);
+}
+
+template <pyobj_type T, pyobj_derived_from<T> U>
+LEV_HIDDEN [[nodiscard]] inline constexpr unamanage_ptr<T> borrow(
+    unmanaged_ptr<U> ptr) noexcept {
+    return unamanage_ptr<T>{ptr};
+}
+
+template <pyobj_type T, pyobj_derived_from<T> U>
+LEV_HIDDEN [[nodiscard]] inline constexpr unamanage_ptr<T> borrow(
+    U* ptr) noexcept {
+    return unamanage_ptr<T>{ptr};
+}
+
+template <pyobj_type T, pyobj_derived_from<T> U>
+LEV_HIDDEN [[nodiscard]] inline constexpr unamanage_ptr<T> borrow(
+    python_ptr<U> const& ptr LEV_LIFETIMEBOUND) noexcept {
+    return ptr.get();
+}
+
+template <typename T, typename U>
+concept adoptable_as =
+    pyobj_type<U> && requires(T&& val) { adopt<U>(std::forward<T>(val)); };
+
+template <typename T, typename U>
+concept stealable_as =
+    pyobj_type<U> && requires(T&& val) { steal<U>(std::forward<T>(val)); };
+
+template <typename T, typename U>
+concept borrowable_as =
+    pyobj_type<U> && requires(T&& val) { borrow<U>(std::forward<T>(val)); };
 
 } // namespace lev

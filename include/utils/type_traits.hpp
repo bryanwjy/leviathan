@@ -199,7 +199,7 @@ using first_data_member_of_t = typename first_data_member_of<T>::type;
 
 template <standard_struct T>
 requires requires(void* p) {
-    requies !std::is_array_v<T>;
+    requires !std::is_array_v<T>;
     { ::new (p) T{init_arg_proxy<T>{}} } noexcept -> std::same_as<T*>;
     typename decltype(map(init_arg_proxy<T>{}))::type;
     requires standard_struct<typename decltype(map(init_arg_proxy<T>{}))::type>;

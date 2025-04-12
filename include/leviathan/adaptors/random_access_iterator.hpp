@@ -10,12 +10,22 @@
 namespace lev {
 namespace py {
 
-template <typename T, cast_policy = cast_policy::safe>
-class random_access_iterator;
-template <typename T, cast_policy = cast_policy::safe>
-class random_access_const_iterator;
-
 namespace details {
+
+enum class cast_policy {
+    safe,
+    unsafe
+};
+
+template <pyobj_type T, cast_policy P>
+LEV_HIDE_INSTANTIATION inline constexpr auto dispatch_cast(
+    auto&& ptr) const noexcept {
+    if constexpr (P == cast_policy::safe) {
+        return dynamic_ptr_cast<T>(std::forward<decltype(ptr)>(ptr));
+    } else {
+        return static_ptr_cast<T>(std::forward<decltype(ptr)>(ptr));
+    }
+}
 
 template <pyobj_type T, cast_policy P>
 class random_access_reference<T, P> {
@@ -54,42 +64,35 @@ protected:
             "Unexpected type dereferenced during random access iteration");
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr void set_pointer(
-        python_ptr<T> const& ptr) const {
-        python_ptr{retain_object,
-            exchange(location_, as_pyobject(adopt(ptr).release()))}
-            .reset();
-    }
-
-    LEV_HIDE_INSTANTIATION inline constexpr void set_pointer(
-        python_ptr<T>&& ptr) const {
+    template <adoptable_as<T> U>
+    requires (!stealable_as<T>)
+    LEV_HIDE_INSTANTIATION inline constexpr void set_pointer(U&& arg) const {
+        auto obj_ptr = __LEV adopt<T>(std::forward<U>(arg));
         python_ptr{
-            retain_object, exchange(location_, as_pyobject(ptr.release()))}
+            retain_object, exchange(location_, as_pyobject(obj_ptr.release()))}
             .reset();
     }
 
-    template <pyobj_derived_from<T> U>
-    LEV_HIDE_INSTANTIATION inline constexpr void set_pointer(
-        python_ptr<U> const& ptr) const {
-        python_ptr{retain_object,
-            exchange(location_, as_pyobject(adopt(ptr).release()))}
-            .reset();
-    }
-
-    template <pyobj_derived_from<T> U>
-    LEV_HIDE_INSTANTIATION inline constexpr void set_pointer(
-        python_ptr<U>&& ptr) const {
+    template <stealable_as<T> U>
+    LEV_HIDE_INSTANTIATION inline constexpr void set_pointer(U&& arg) const {
+        auto obj_ptr = __LEV steal<T>(std::forward<U>(arg));
         python_ptr{
-            retain_object, exchange(location_, as_pyobject(ptr.release()))}
+            retain_object, exchange(location_, as_pyobject(obj_ptr.release()))}
             .reset();
     }
 
 private:
     PyObject*& location_;
 };
+
 } // namespace details
 
-template <pyobj_type T, cast_policy P>
+template <typename T, details::cast_policy = details::cast_policy::safe>
+class random_access_iterator;
+template <typename T, details::cast_policy = details::cast_policy::safe>
+class random_access_const_iterator;
+
+template <pyobj_type T, details::cast_policy P>
 class random_access_iterator<T, P> {
     using this_type = random_access_const_iterator;
     using reference_proxy =
@@ -187,11 +190,21 @@ public:
         return random_access_const_iterator<T>{location_};
     }
 
+    LEV_HIDE_INSTANTIATION inline constexpr PyObject**
+    address() const noexcept {
+        return location_;
+    }
+
+    LEV_HIDE_INSTANTIATION friend inline constexpr void iter_swap(
+        random_access_iterator& left, random_access_iterator& right) noexcept {
+        *left.location_ = __LEV exchange(*right.location_, *left.location_);
+    }
+
 private:
     PyObject** location_;
 };
 
-template <pyobj_type T, cast_policy P>
+template <pyobj_type T, cast_policy::cast_policy P>
 class random_access_const_iterator<T, P> {
     using this_type = random_access_const_iterator;
 
@@ -213,12 +226,12 @@ public:
 
     LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline auto
     operator*() const noexcept {
-        return dispatch_cast<T, P>(*location_);
+        return details::dispatch_cast<T, P>(*location_);
     }
 
     LEV_HIDE_INSTANTIATION [[nodiscard, gnu::pure]] inline auto operator[](
         difference_type idx) const noexcept {
-        return dispatch_cast<T, P>(location_[idx]);
+        return details::dispatch_cast<T, P>(location_[idx]);
     }
 
     LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr this_type operator+(

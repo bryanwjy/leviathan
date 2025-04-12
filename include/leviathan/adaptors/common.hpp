@@ -1,6 +1,7 @@
 // Copyright 2025, Bryan Wong
 
 #include "leviathan/pointer.hpp"
+#include "leviathan/utility.hpp"
 
 #include <Python.h>
 
@@ -10,10 +11,9 @@
 
 namespace lev {
 namespace py {
-struct nothrow_t {
-    explicit inline constexpr nothrow_t() noexcept = default;
-};
-LEV_HIDDEN inline constexpr nothrow_t nothrow{};
+
+using ltl::nothrow;
+using typename ltl::nothrow_t;
 
 using size_t = decltype(sizeof(0));
 using ptrdiff_t = decltype(static_cast<char*>(0) - static_cast<char*>(0));

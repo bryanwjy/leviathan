@@ -22,8 +22,9 @@ public:
         { hash(value) } -> std::convertible_to<hash_value>;
     }
     LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr hash_value operator()(
-        T const& value) const noexcept(noexcept(hash(value))) {
-        return hash(value);
+        T const& value) const
+        noexcept(noexcept(static_cast<hash_value>(hash(value)))) {
+        return static_cast<hash_value>(hash(value));
     }
 
     template <pyobj_type T>

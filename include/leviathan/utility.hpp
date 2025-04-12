@@ -8,6 +8,11 @@
 
 namespace lev {
 
+struct nothrow_t {
+    explicit inline constexpr nothrow_t() noexcept = default;
+};
+LEV_HIDDEN inline constexpr nothrow_t nothrow{};
+
 namespace details {
 
 template <typename>

@@ -84,11 +84,10 @@ concept container_option_type =
     is_container_option_type_v<T> && std::derived_from<T, ownership_option> &&
     std::derived_from<T, access_option>;
 
-template <typename Container, typename... P>
-concept with_container_options =
+template <typename T, typename... P>
+concept with_container_options = container_option_type<T> &&
     (... && std::is_base_of_v<container_option_t, P>)&&(
-        container_option_type<Container> && ... &&
-        std::derived_from<Container, P>);
+        ... && std::derived_from<T, P>);
 
 template <typename... Os>
 struct container_options_t<Os...> : public Os... {

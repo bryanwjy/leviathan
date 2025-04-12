@@ -30,7 +30,6 @@ public:
     template <details::is_supported_v T1, details::is_supported_v T2>
     explicit inline constexpr crtical_section(
         unmanaged_ptr<T1> obj1, unmanaged_ptr<T2> obj2) noexcept
-    requires details::is_supported_v
         : section{.two = {}}
         , type_{section_type::two} {
         LEV_ASSERT(obj1 != nullptr);

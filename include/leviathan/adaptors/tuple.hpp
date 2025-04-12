@@ -4,6 +4,7 @@
 #include "leviathan/adaptors/random_access_iterator.hpp"
 #include "leviathan/adaptos/container_options.hpp"
 #include "leviathan/pointer.hpp"
+#include "leviathan/utility.hpp"
 
 #include <array>
 #include <compare>
@@ -36,6 +37,15 @@ LEV_HIDDEN std::span<PyObject* const> items(unmanaged_ptr<PyTupleObject> tuple,
     // the lifetime of the array because PyTupleObject defines it as a
     // PyObject*[1] member
 
+#ifndef __cpp_lib_start_lifetime_as
+    // warning suppression
+#  define __cpp_lib_start_lifetime_as 0
+#endif
+#if __cpp_lib_start_lifetime_as >= 202207L
+    auto ptr = std::start_lifetime_as_array<PyObject*>(
+        static_cast<PyObject**>(tuple->ob_item), size);
+    return std::span<PyObject* const>{ptr, ptr + size};
+#else
     // Unknown: std::launder may work?
     PyObject** ptr = reinterpret_cast<PyObject**>(
         memmove(tuple->ob_item, tuple->ob_item, size * sizeof(PyObject*)));
@@ -48,6 +58,7 @@ LEV_HIDDEN std::span<PyObject* const> items(unmanaged_ptr<PyTupleObject> tuple,
     // This should get optimize out but is here to give the program defined
     // behaviour
     for (auto ptr : span) {}
+#endif
 
     return span;
 }
@@ -56,7 +67,7 @@ LEV_HIDDEN std::span<PyObject* const> items(unmanaged_ptr<PyTupleObject> tuple,
 template <identifiable_pyobj_type... Ts>
 class LEV_API tuple_policy {
 public:
-    LEV_HIDE_INSTANTIATION static constexpr size_t extent = sizeof...(Ts);
+    static constexpr size_t extent = sizeof...(Ts);
 
 protected:
     using span_type = std::span<PyObject* const, sizeof...(Ts)>;
@@ -127,7 +138,7 @@ public:
     using iterator = const_iterator;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
     using reverse_iterator = std::reverse_iterator<iterator>;
-    LEV_HIDE_INSTANTIATION static constexpr size_t extent = E;
+    static constexpr size_t extent = E;
 
 protected:
     using span_type = std::span<PyObject* const, E>;
@@ -843,3 +854,7 @@ requires (N != lev::dynamic_extent)
 struct std::tuple_element<I, lev::py::borrowed::array<T, N>> {
     using type = unmanaged_ptr<T>;
 };
+
+template <pyobj_type T>
+inline constexpr bool
+    std::ranges::enable_borrowed_range<__LEV py::borrowed::array<T>> = true;

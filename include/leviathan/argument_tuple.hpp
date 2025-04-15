@@ -63,17 +63,15 @@ struct empty_t {
 template <typename T>
 union optional_union {
     static_assert(!std::is_same_v<empty_t>, "Invalid type");
-    LEV_HIDE_INSTANTIATION inline constexpr optional_union(
-        optional_union const&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr optional_union(
-        optional_union const&) noexcept(std::is_nothrow_copy_constructible_v<T>)
+    LEV_HIDE_INSTANTIATION inline constexpr optional_union(optional_union const&) = delete;
+    LEV_HIDE_INSTANTIATION inline constexpr optional_union(optional_union const&) noexcept(
+        std::is_nothrow_copy_constructible_v<T>)
     requires (std::is_copy_constructible_v<T> &&
                  std::is_trivially_copy_constructible_v<T>)
     = default;
-    LEV_HIDE_INSTANTIATION inline constexpr optional_union(
-        optional_union&&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr optional_union(
-        optional_union&&) noexcept(std::is_nothrow_move_constructible_v<T>)
+    LEV_HIDE_INSTANTIATION inline constexpr optional_union(optional_union&&) = delete;
+    LEV_HIDE_INSTANTIATION inline constexpr optional_union(optional_union&&) noexcept(
+        std::is_nothrow_move_constructible_v<T>)
     requires (std::is_move_constructible_v<T> &&
                  std::is_trivially_move_constructible_v<T>)
     = default;
@@ -84,27 +82,23 @@ union optional_union {
     requires (std::is_copy_assignable_v<T> &&
                  std::is_trivially_copy_assignable_v<T>)
     = default;
-    LEV_HIDE_INSTANTIATION inline constexpr optional_union& operator=(
-        optional_union&&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr optional_union& operator=(
-        optional_union&&) noexcept(std::is_nothrow_move_assignable_v<T>)
+    LEV_HIDE_INSTANTIATION inline constexpr optional_union& operator=(optional_union&&) = delete;
+    LEV_HIDE_INSTANTIATION inline constexpr optional_union& operator=(optional_union&&) noexcept(
+        std::is_nothrow_move_assignable_v<T>)
     requires (std::is_move_assignable_v<T> &&
                  std::is_trivially_move_assignable_v<T>)
     = default;
 
     template <typename... Args>
-    LEV_HIDE_INSTANTIATION inline constexpr explicit optional_union(
-        std::in_place_t,
+    LEV_HIDE_INSTANTIATION inline constexpr explicit optional_union(std::in_place_t,
         Args&&... args) noexcept(std::is_nothrow_constructible_v<T, Args...>)
         : value{std::forward<Args>(args)...} {}
 
-    LEV_HIDE_INSTANTIATION inline constexpr explicit optional_union(
-        empty_t) noexcept
+    LEV_HIDE_INSTANTIATION inline constexpr explicit optional_union(empty_t) noexcept
         : empty{} {}
 
     template <typename F, typename... Args>
-    LEV_HIDE_INSTANTIATION inline constexpr explicit optional_union(generator_t,
-        F&& func,
+    LEV_HIDE_INSTANTIATION inline constexpr explicit optional_union(generator_t, F&& func,
         Args&&... args) noexcept(std::is_nothrow_constructible_v<T, Args...>)
         : value{std::invoke(
               std::forward<F>(func), std::forward<Args>(args)...)} {}
@@ -116,8 +110,8 @@ union optional_union {
     = default;
     LEV_HIDE_INSTANTIATION inline constexpr ~optional_union() noexcept {}
 
-    [[LEV_MSVC no_unique_address]] empty_t empty;
-    [[LEV_MSVC no_unique_address]] T value;
+    LEV_NO_UNIQUE_ADDRESS empty_t empty;
+    LEV_NO_UNIQUE_ADDRESS T value;
 };
 
 template <typename T, typename U>
@@ -134,17 +128,14 @@ class storage_base {
 
 public:
     LEV_HIDE_INSTANTIATION inline constexpr ~storage_base() noexcept = default;
-    LEV_HIDE_INSTANTIATION inline constexpr storage_base(
-        storage_base const&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr storage_base(
-        storage_base const&) noexcept
+    LEV_HIDE_INSTANTIATION inline constexpr storage_base(storage_base const&) = delete;
+    LEV_HIDE_INSTANTIATION inline constexpr storage_base(storage_base const&) noexcept
     requires ((... && std::is_copy_constructible_v<Ts>) &&
                  (... && std::is_trivially_copy_constructible_v<Ts>))
     = default;
 
-    LEV_HIDE_INSTANTIATION inline constexpr storage_base(
-        storage_base const& other) noexcept((... &&
-        std::is_nothrow_copy_constructible_v<Ts>))
+    LEV_HIDE_INSTANTIATION inline constexpr storage_base(storage_base const& other) noexcept(
+        (... && std::is_nothrow_copy_constructible_v<Ts>))
     requires ((... && std::is_copy_constructible_v<Ts>) &&
         !(... && std::is_trivially_copy_constructible_v<Ts>))
         : storage_base(
@@ -154,17 +145,14 @@ public:
                           other.template value_ref<Is>())...};
               }(std::index_sequence_for<Ts...>{})) {}
 
-    LEV_HIDE_INSTANTIATION inline constexpr storage_base(
-        storage_base&&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr storage_base(
-        storage_base&&) noexcept
+    LEV_HIDE_INSTANTIATION inline constexpr storage_base(storage_base&&) = delete;
+    LEV_HIDE_INSTANTIATION inline constexpr storage_base(storage_base&&) noexcept
     requires ((... && std::is_move_constructible_v<Ts>) &&
                  (... && std::is_trivially_move_constructible_v<Ts>))
     = default;
 
-    LEV_HIDE_INSTANTIATION inline constexpr storage_base(
-        storage_base&& other) noexcept((... &&
-        std::is_nothrow_move_constructible_v<Ts>))
+    LEV_HIDE_INSTANTIATION inline constexpr storage_base(storage_base&& other) noexcept(
+        (... && std::is_nothrow_move_constructible_v<Ts>))
     requires ((... && std::is_move_constructible_v<Ts>) &&
         !(... && std::is_trivially_move_constructible_v<Ts>))
         : storage_base(
@@ -176,8 +164,7 @@ public:
 
     LEV_HIDE_INSTANTIATION inline constexpr storage_base& operator=(
         storage_base const&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr storage_base& operator=(
-        storage_base const&) noexcept
+    LEV_HIDE_INSTANTIATION inline constexpr storage_base& operator=(storage_base const&) noexcept
     requires ((... && std::is_copy_assignable_v<Ts>) &&
                  (... && std::is_trivially_copy_assignable_v<Ts>))
     = default;
@@ -207,10 +194,8 @@ public:
         return *this;
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr storage_base& operator=(
-        storage_base&&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr storage_base& operator=(
-        storage_base&&) noexcept
+    LEV_HIDE_INSTANTIATION inline constexpr storage_base& operator=(storage_base&&) = delete;
+    LEV_HIDE_INSTANTIATION inline constexpr storage_base& operator=(storage_base&&) noexcept
     requires ((... && std::is_move_assignable_v<Ts>) &&
                  (... && std::is_trivially_move_assignable_v<Ts>))
     = default;
@@ -260,8 +245,7 @@ public:
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr decltype(auto)
-    value_ref() & noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr decltype(auto) value_ref() & noexcept {
         static_assert(I < sizeof...(Ts) - 1);
         return std::get<I>(storage_);
     }
@@ -281,8 +265,7 @@ public:
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr decltype(auto)
-    get() const& noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr decltype(auto) get() const& noexcept {
         static_assert(I < sizeof...(Ts) - 1);
         if constexpr (is_optional_v<template_element_t<I, storage_base>>) {
             return has_value<I>() ? std::addressof(std::get<I>(storage_).value)
@@ -294,8 +277,7 @@ public:
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr decltype(auto)
-    get() & noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr decltype(auto) get() & noexcept {
         static_assert(I < sizeof...(Ts) - 1);
         if constexpr (is_optional_v<template_element_t<I, storage_base>>) {
             return has_value<I>() ? std::addressof(std::get<I>(storage_).value)
@@ -307,8 +289,7 @@ public:
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr decltype(auto)
-    get() const&& noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr decltype(auto) get() const&& noexcept {
         static_assert(I < sizeof...(Ts) - 1);
         if constexpr (is_optional_v<template_element_t<I, storage_base>>) {
             return has_value<I>() ? std::addressof(std::get<I>(storage_).value)
@@ -320,8 +301,7 @@ public:
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr decltype(auto)
-    get() && noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr decltype(auto) get() && noexcept {
         static_assert(I < sizeof...(Ts) - 1);
         if constexpr (is_optional_v<template_element_t<I, storage_base>>) {
             return has_value<I>() ? std::addressof(std::get<I>(storage_).value)
@@ -333,8 +313,7 @@ public:
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr void
-    reset() noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr void reset() noexcept {
         using target_type = std::tuple_element_t<I, storage_type>;
         if constexpr (!std::is_trivially_destructible_v<target_type>) {
             if (has_value<I>()) {
@@ -342,13 +321,12 @@ public:
             }
         }
 
-        std::construct_at(std::addressof(value_ref<I>().empty));
+        __LTL construct_at(std::addressof(value_ref<I>().empty));
         clear_value<I>();
     }
 
     template <size_t I, typename F, typename... Args>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr void generate_at(
-        F&& func,
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr void generate_at(F&& func,
         Args&&... args) noexcept(std::is_nothrow_invocable_v<F, Args...> &&
         std::is_nothrow_constructible_v<std::tuple_element_t<I, storage_type>,
             std::invoke_result_t<F, Args...>>) {
@@ -356,7 +334,7 @@ public:
 
         LEV_ASSERT(!this->template has_value<I>());
         LEV_TRY {
-            std::construct_at(std::addressof(value_ref<I>()), lev::generator,
+            __LTL construct_at(std::addressof(value_ref<I>()), lev::generator,
                 std::forward<F>(func), std::forward<Args>(args));
             set_value<I>();
         } LEV_CATCH(...) {
@@ -374,7 +352,7 @@ public:
 
         LEV_ASSERT(!this->template has_value<I>());
         LEV_TRY {
-            std::construct_at(std::addressof(value_ref<I>().value),
+            __LTL construct_at(std::addressof(value_ref<I>().value),
                 std::forward<Args>(args)...);
             set_value<I>();
         } LEV_CATCH(...) {
@@ -397,8 +375,7 @@ private:
     template <typename F, typename... Args>
     requires (std::is_invocable_v<F, Args...> &&
         std::is_constructible_v<storage_type, std::invoke_result_t<F, Args...>>)
-    LEV_HIDE_INSTANTIATION inline constexpr storage_base(generator_t tag,
-        F&& func,
+    LEV_HIDE_INSTANTIATION inline constexpr storage_base(generator_t tag, F&& func,
         Args&&... args) noexcept(std::is_nothrow_invocable_v<F, Args...> &&
         std::is_nothrow_constructible_v<storage_type,
             std::invoke_result_t<F, Args...>>)
@@ -429,29 +406,29 @@ class tuple<Ts...> : private details::storage_base<Ts...> {
     using base_type = details::storage_base<Ts...>;
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr decltype(auto)
-    get(tuple& t) noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr decltype(auto) get(
+        tuple& t) noexcept LEV_LIFETIMEBOUND {
         static_assert(I < sizeof...(Ts), "Index out of range");
         return t.template get<I>();
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr decltype(auto)
-    get(tuple const& t) noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr decltype(auto) get(
+        tuple const& t) noexcept LEV_LIFETIMEBOUND {
         static_assert(I < sizeof...(Ts), "Index out of range");
         return t.template get<I>();
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr decltype(auto)
-    get(tuple&& t) noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr decltype(auto) get(
+        tuple&& t) noexcept LEV_LIFETIMEBOUND {
         static_assert(I < sizeof...(Ts), "Index out of range");
         return std::move(t.template get<I>());
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr decltype(auto)
-    get(tuple const&& t) noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr decltype(auto) get(
+        tuple const&& t) noexcept LEV_LIFETIMEBOUND {
         static_assert(I < sizeof...(Ts), "Index out of range");
         return std::move(t.template get<I>());
     }
@@ -463,44 +440,36 @@ class tuple<Ts...> : private details::storage_base<Ts...> {
     }
 
     template <string_literal auto Name>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr decltype(auto)
-    get(tuple const& t) noexcept LEV_LIFETIMEBOUND
-    requires ((... && named_declaration<Ts>))
-    {
-        static_assert(
-            name_to_index(Name) < sizeof...(Ts), "Invalid argument name");
-        return get<name_to_index(Name)>(t);
-    }
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr decltype(auto) get(
+        tuple const& t) noexcept LEV_LIFETIMEBOUND requires((... && named_declaration<Ts>)) {
+            static_assert(
+                name_to_index(Name) < sizeof...(Ts), "Invalid argument name");
+            return get<name_to_index(Name)>(t);
+        }
 
     template <string_literal auto Name>
     LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr decltype(auto)
-    get(tuple& t) noexcept LEV_LIFETIMEBOUND
-    requires ((... && named_declaration<Ts>))
-    {
-        static_assert(
-            name_to_index(Name) < sizeof...(Ts), "Invalid argument name");
-        return get<name_to_index(Name)>(t);
-    }
+        get(tuple& t) noexcept LEV_LIFETIMEBOUND requires((... && named_declaration<Ts>)) {
+            static_assert(
+                name_to_index(Name) < sizeof...(Ts), "Invalid argument name");
+            return get<name_to_index(Name)>(t);
+        }
 
     template <string_literal auto Name>
     LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr decltype(auto)
-    get(tuple&& t) noexcept LEV_LIFETIMEBOUND
-    requires ((... && named_declaration<Ts>))
-    {
-        static_assert(
-            name_to_index(Name) < sizeof...(Ts), "Invalid argument name");
-        return get<name_to_index(Name)>(std::move(t));
-    }
+        get(tuple&& t) noexcept LEV_LIFETIMEBOUND requires((... && named_declaration<Ts>)) {
+            static_assert(
+                name_to_index(Name) < sizeof...(Ts), "Invalid argument name");
+            return get<name_to_index(Name)>(std::move(t));
+        }
 
     template <string_literal auto Name>
     LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr decltype(auto)
-    get(tuple const&& t) noexcept LEV_LIFETIMEBOUND
-    requires ((... && named_declaration<Ts>))
-    {
-        static_assert(
-            name_to_index(Name) < sizeof...(Ts), "Invalid argument name");
-        return get<name_to_index(Name)>(std::move(t));
-    }
+        get(tuple const&& t) noexcept LEV_LIFETIMEBOUND requires((... && named_declaration<Ts>)) {
+            static_assert(
+                name_to_index(Name) < sizeof...(Ts), "Invalid argument name");
+            return get<name_to_index(Name)>(std::move(t));
+        }
 
     template <size_t I>
     LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr auto has_value(
@@ -510,8 +479,8 @@ class tuple<Ts...> : private details::storage_base<Ts...> {
     }
 
     template <size_t O, size_t Count = static_cast<size_t>(-1)>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr auto
-    has_values(tuple const& t) noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr auto has_values(
+        tuple const& t) noexcept {
         static_assert(I < sizeof...(Ts), "Index out of range");
         return t.template has_values<O, Count>();
     }
@@ -541,22 +510,19 @@ public:
         std::is_nothrow_copy_constructible_v<base_type>) = default;
     LEV_HIDE_INSTANTIATION inline constexpr tuple(tuple&&) noexcept(
         std::is_nothrow_move_constructible_v<base_type>) = default;
-    LEV_HIDE_INSTANTIATION inline constexpr tuple&
-    operator=(tuple const&) noexcept(
+    LEV_HIDE_INSTANTIATION inline constexpr tuple& operator=(tuple const&) noexcept(
         std::is_nothrow_copy_assignable_v<base_type>) = default;
     LEV_HIDE_INSTANTIATION inline constexpr tuple& operator=(tuple&&) noexcept(
         std::is_nothrow_move_assignable_v<base_type>) = default;
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto
-    mandatory() const& noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto mandatory() const& noexcept {
         return []<size_t... Is>(std::index_sequence<Is...>) {
             using return_type = std::tuple<decltype(get<Is>(*this))...>;
             return return_type{get<Is>(*this)...};
         }(std::make_index_sequence<optional_offset_v>{});
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto
-    optional() const& noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto optional() const& noexcept LEV_LIFETIMEBOUND {
         return []<size_t... Is>(std::index_sequence<Is...>) {
             using return_type =
                 std::tuple<decltype(get<Is + optional_offset_v>(*this))...>;
@@ -564,24 +530,21 @@ public:
         }(std::make_index_sequence<sizeof...(Ts) - optional_offset_v>{});
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto
-    all() const& noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto all() const& noexcept LEV_LIFETIMEBOUND {
         return []<size_t... Is>(std::index_sequence<Is...>) {
             using return_type = std::tuple<decltype(get<Is>(*this))...>;
             return return_type{get<Is>(*this)...};
         }(std::make_index_sequence<sizeof...(Ts)>{});
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto
-    mandatory() & noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto mandatory() & noexcept LEV_LIFETIMEBOUND {
         return []<size_t... Is>(std::index_sequence<Is...>) {
             using return_type = std::tuple<decltype(get<Is>(*this))...>;
             return return_type{get<Is>(*this)...};
         }(std::make_index_sequence<optional_offset_v>{});
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto
-    optional() & noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto optional() & noexcept LEV_LIFETIMEBOUND {
         return []<size_t... Is>(std::index_sequence<Is...>) {
             using return_type =
                 std::tuple<decltype(get<Is + optional_offset_v>(*this))...>;
@@ -589,16 +552,14 @@ public:
         }(std::make_index_sequence<sizeof...(Ts) - optional_offset_v>{});
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto
-    all() & noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto all() & noexcept LEV_LIFETIMEBOUND {
         return []<size_t... Is>(std::index_sequence<Is...>) {
             using return_type = std::tuple<decltype(get<Is>(*this))...>;
             return return_type{get<Is>(*this)...};
         }(std::make_index_sequence<sizeof...(Ts)>{});
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto
-    mandatory() && noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto mandatory() && noexcept LEV_LIFETIMEBOUND {
         return []<size_t... Is>(std::index_sequence<Is...>) {
             using return_type =
                 std::tuple<decltype(get<Is>(std::move(*this)))...>;
@@ -606,8 +567,7 @@ public:
         }(std::make_index_sequence<optional_offset_v>{});
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto
-    all() && noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto all() && noexcept LEV_LIFETIMEBOUND {
         return []<size_t... Is>(std::index_sequence<Is...>) {
             using return_type =
                 std::tuple<decltype(get<Is>(std::move(*this)))...>;
@@ -615,8 +575,7 @@ public:
         }(std::make_index_sequence<sizeof...(Ts)>{});
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto
-    mandatory() const&& noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto mandatory() const&& noexcept LEV_LIFETIMEBOUND {
         return []<size_t... Is>(std::index_sequence<Is...>) {
             using return_type =
                 std::tuple<decltype(get<Is>(std::move(*this)))...>;
@@ -624,8 +583,7 @@ public:
         }(std::make_index_sequence<optional_offset_v>{});
     }
 
-    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto
-    all() const&& noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto all() const&& noexcept LEV_LIFETIMEBOUND {
         return []<size_t... Is>(std::index_sequence<Is...>) {
             using return_type =
                 std::tuple<decltype(get<Is>(std::move(*this)))...>;

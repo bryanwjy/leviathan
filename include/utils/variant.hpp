@@ -46,14 +46,12 @@ struct LEV_API variant_alternative<I, variant<Ts...>> :
     template_element<I, typelist<Ts...>> {};
 
 struct LEV_API monostate {
-    LEV_HIDE_INSTANTIATION
-    [[nodiscard, gnu::always_inline]] friend inline constexpr bool operator==(
+    LEV_HIDE_INSTANTIATION [[nodiscard]] LEV_ALWAYS_INLINE friend inline constexpr bool operator==(
         monostate, monostate) noexcept {
         return true;
     }
 
-    LEV_HIDE_INSTANTIATION
-    [[nodiscard, gnu::always_inline]] friend inline constexpr auto operator<=>(
+    LEV_HIDE_INSTANTIATION [[nodiscard]] LEV_ALWAYS_INLINE friend inline constexpr auto operator<=>(
         monostate, monostate) noexcept {
         return std::strong_ordering::equal;
     }
@@ -70,15 +68,11 @@ union multi_union<Head, Tail...> {
     using second_type = std::conditional_t<(sizeof...(Tail) > 1),
         multi_union<Tail...>, template_element_t<1, multi_union>>;
 
-    LEV_HIDE_INSTANTIATION static constexpr bool is_last_union =
-        (sizeof...(Tail) == 1);
+    LEV_HIDE_INSTANTIATION static constexpr bool is_last_union = (sizeof...(Tail) == 1);
 
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union(
-        multi_union const&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union(
-        multi_union const&) noexcept(std::
-                                         is_nothrow_copy_constructible_v<
-                                             first_type> &&
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union(multi_union const&) = delete;
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union(multi_union const&) noexcept(
+        std::is_nothrow_copy_constructible_v<first_type> &&
         std::is_nothrow_copy_constructible_v<second_type>)
     requires (std::is_copy_constructible_v<first_type> &&
                  std::is_copy_constructible_v<second_type> &&
@@ -94,10 +88,8 @@ union multi_union<Head, Tail...> {
                  std::is_trivially_move_constructible_v<first_type> &&
                  std::is_trivially_move_constructible_v<second_type>)
     = default;
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union& operator=(
-        multi_union const&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union&
-    operator=(multi_union const&) noexcept(
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union& operator=(multi_union const&) = delete;
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union& operator=(multi_union const&) noexcept(
         std::is_nothrow_copy_assignable_v<first_type> &&
         std::is_nothrow_copy_assignable_v<second_type>)
     requires (std::is_copy_assignable_v<first_type> &&
@@ -105,10 +97,9 @@ union multi_union<Head, Tail...> {
                  std::is_trivially_copy_assignable_v<first_type> &&
                  std::is_trivially_copy_assignable_v<second_type>)
     = default;
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union& operator=(
-        multi_union&&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union& operator=(
-        multi_union&&) noexcept(std::is_nothrow_move_assignable_v<first_type> &&
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union& operator=(multi_union&&) = delete;
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union& operator=(multi_union&&) noexcept(
+        std::is_nothrow_move_assignable_v<first_type> &&
         std::is_nothrow_move_assignable_v<second_type>)
     requires (std::is_move_assignable_v<first_type> &&
                  std::is_move_assignable_v<second_type> &&
@@ -118,31 +109,28 @@ union multi_union<Head, Tail...> {
 
     template <typename... Args>
     requires (std::is_constructible_v<first_type, Args...>)
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union(
-        std::in_place_type_t<first_type>,
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union(std::in_place_type_t<first_type>,
         Args&&... args) noexcept(std::is_nothrow_constructible_v<first_type,
         Args...>)
         : first{std::forward<Args>(args)...} {}
 
     template <typename... Args>
     requires (std::is_constructible_v<first_type, Args...>)
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union(
-        std::in_place_index_t<0>,
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union(std::in_place_index_t<0>,
         Args&&... args) noexcept(std::is_nothrow_constructible_v<first_type,
         Args...>)
         : first{std::forward<Args>(args)...} {}
 
     template <typename F, typename... Args>
     requires (std::is_nothrow_invocable_r_v<first_type, F, Args...>)
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union(generator_index_t<0>,
-        F&& f, Args&&... args) noexcept(std::is_nothrow_invocable_v<F, Args...>)
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union(generator_index_t<0>, F&& f,
+        Args&&... args) noexcept(std::is_nothrow_invocable_v<F, Args...>)
         : first{std::invoke_r<first_type>(
               std::forward<F>(f), std::forward<Args>(args)...)} {}
 
     template <typename F, typename... Args>
     requires (std::is_nothrow_invocable_r_v<first_type, F, Args...>)
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union(
-        generator_type_t<first_type>, F&& f,
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union(generator_type_t<first_type>, F&& f,
         Args&&... args) noexcept(std::is_nothrow_invocable_v<F, Args...>)
         : first{std::invoke_r<first_type>(
               std::forward<F>(f), std::forward<Args>(args)...)} {}
@@ -150,8 +138,7 @@ union multi_union<Head, Tail...> {
     template <typename U, typename... Args>
     requires (!is_last_union &&
         std::is_constructible_v<second_type, std::in_place_type_t<U>, Args...>)
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union(
-        std::in_place_type_t<U> tag,
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union(std::in_place_type_t<U> tag,
         Args&&... args) noexcept(std::is_nothrow_constructible_v<second_type,
         in_place_type_t<U>, Args...>)
         : second{tag, std::forward<Args>(args)...} {}
@@ -160,8 +147,7 @@ union multi_union<Head, Tail...> {
     requires (!is_last_union &&
         std::is_constructible_v<second_type, std::in_place_index_t<N - 1>,
             Args...>)
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union(
-        std::in_place_index_t<N>,
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union(std::in_place_index_t<N>,
         Args&&... args) noexcept(std::is_nothrow_constructible_v<second_type,
         std::in_place_index_t<N>, Args...>)
         : second{std::in_place_index<N - 1>, std::forward<Args>(args)...} {}
@@ -170,30 +156,28 @@ union multi_union<Head, Tail...> {
     requires (!is_last_union &&
         std::is_constructible_v<second_type, generator_index_t<N - 1>, F,
             Args...>)
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union(generator_index_t<N>,
-        F&& f, Args&&... args) noexcept(std::is_nothrow_invocable_v<F, Args...>)
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union(generator_index_t<N>, F&& f,
+        Args&&... args) noexcept(std::is_nothrow_invocable_v<F, Args...>)
         : second{generator_index<N - 1>, std::forward<F>(f),
               std::forward<Args>(args)...} {}
 
     template <typename U, typename F, typename... Args>
     requires (!is_last_union &&
         std::is_constructible_v<second_type, generator_type_t<U>, F, Args...>)
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union(generator_type_t<U> tag,
-        F&& f, Args&&... args) noexcept(std::is_nothrow_invocable_v<F, Args...>)
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union(generator_type_t<U> tag, F&& f,
+        Args&&... args) noexcept(std::is_nothrow_invocable_v<F, Args...>)
         : second{tag, std::forward<F>(f), std::forward<Args>(args)...} {}
 
     template <typename... Args>
     requires (is_last_union && std::is_constructible_v<second_type, Args...>)
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union(
-        std::in_place_type_t<second_type>,
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union(std::in_place_type_t<second_type>,
         Args&&... args) noexcept(std::is_nothrow_constructible_v<second_type,
         Args...>)
         : second{std::forward<Args>(args)...} {}
 
     template <typename... Args>
     requires (is_last_union && std::is_constructible_v<second_type, Args...>)
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union(
-        std::in_place_index_t<1>,
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union(std::in_place_index_t<1>,
         Args&&... args) noexcept(std::is_nothrow_constructible_v<second_type,
         Args...>)
         : second{std::forward<Args>(args)...} {}
@@ -201,16 +185,15 @@ union multi_union<Head, Tail...> {
     template <typename F, typename... Args>
     requires (
         is_last_union && std::is_nothrow_invocable_r_v<second_type, F, Args...>)
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union(generator_index_t<1>,
-        F&& f, Args&&... args) noexcept(std::is_nothrow_invocable_v<F, Args...>)
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union(generator_index_t<1>, F&& f,
+        Args&&... args) noexcept(std::is_nothrow_invocable_v<F, Args...>)
         : second{std::invoke_r<second_type>(
               std::forward<F>(f), std::forward<Args>(args)...)} {}
 
     template <typename F, typename... Args>
     requires (
         is_last_union && std::is_nothrow_invocable_r_v<second_type, F, Args...>)
-    LEV_HIDE_INSTANTIATION inline constexpr multi_union(
-        generator_type_t<second_type>, F&& f,
+    LEV_HIDE_INSTANTIATION inline constexpr multi_union(generator_type_t<second_type>, F&& f,
         Args&&... args) noexcept(std::is_nothrow_invocable_v<F, Args...>)
         : second{std::invoke_r<second_type>(
               std::forward<F>(f), std::forward<Args>(args)...)} {}
@@ -222,9 +205,8 @@ union multi_union<Head, Tail...> {
     LEV_HIDE_INSTANTIATION inline constexpr ~multi_union() noexcept {}
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard, gnu::flatten]] inline constexpr decltype(auto)
-        get() const& noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::flatten]] inline constexpr decltype(auto)
+    get() const& noexcept {
         static_assert(I <= sizeof...(Tail));
         if constexpr (I == 0) {
             return first;
@@ -236,9 +218,8 @@ union multi_union<Head, Tail...> {
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard, gnu::flatten]] inline constexpr decltype(auto)
-        get() & noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::flatten]] inline constexpr decltype(auto)
+    get() & noexcept {
         static_assert(I <= sizeof...(Tail));
         if constexpr (I == 0) {
             return first;
@@ -250,9 +231,8 @@ union multi_union<Head, Tail...> {
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard, gnu::flatten]] inline constexpr decltype(auto)
-        get() const&& noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::flatten]] inline constexpr decltype(auto)
+    get() const&& noexcept {
         static_assert(I <= sizeof...(Tail));
         if constexpr (I == 0) {
             return std::move(first);
@@ -264,9 +244,8 @@ union multi_union<Head, Tail...> {
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard, gnu::flatten]] inline constexpr decltype(auto)
-        get() && noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard, gnu::flatten]] inline constexpr decltype(auto)
+    get() && noexcept {
         static_assert(I <= sizeof...(Tail));
         if constexpr (I == 0) {
             return std::move(first);
@@ -277,15 +256,15 @@ union multi_union<Head, Tail...> {
         }
     }
 
-    [[LEV_MSVC no_unique_address]] first_type first;
-    [[LEV_MSVC no_unique_address]] second_type second;
+    LEV_NO_UNIQUE_ADDRESS first_type first;
+    LEV_NO_UNIQUE_ADDRESS second_type second;
 };
 
 template <typename T>
-LEV_HIDE_INSTANTIATION inline constexpr auto jump_table_for =
-    []<size_t... Is>(std::index_sequence<Is...>) {
-        return jump_table<Is...>{};
-    }(std::make_index_sequence<template_size_v<T>>{});
+LEV_HIDE_INSTANTIATION inline constexpr auto jump_table_for = []<size_t... Is>(
+                                                 std::index_sequence<Is...>) {
+    return jump_table<Is...>{};
+}(std::make_index_sequence<template_size_v<T>>{});
 
 template <typename T, typename U>
 LEV_HIDE_INSTANTIATION inline constexpr T make_from_multi_union(size_t index,
@@ -353,8 +332,7 @@ class variant_base {
             , index_{I} {}
 
         template <typename U>
-        LEV_HIDE_INSTANTIATION inline constexpr container(variant_dispatch_t,
-            size_t index,
+        LEV_HIDE_INSTANTIATION inline constexpr container(variant_dispatch_t, size_t index,
             U&& arg) noexcept(noexcept(make_from_multi_union<union_type>(index,
             std::declval<U>())))
         requires (allow_external_overlap)
@@ -365,10 +343,8 @@ class variant_base {
                   }}
             , index_(index) {}
 
-        LEV_HIDE_INSTANTIATION inline constexpr container(
-            container const&) = delete;
-        LEV_HIDE_INSTANTIATION inline constexpr container(
-            container const&) noexcept
+        LEV_HIDE_INSTANTIATION inline constexpr container(container const&) = delete;
+        LEV_HIDE_INSTANTIATION inline constexpr container(container const&) noexcept
         requires ((... && std::is_copy_constructible_v<Ts>) &&
                      (... && std::is_trivially_copy_constructible_v<Ts>))
         = default;
@@ -377,17 +353,13 @@ class variant_base {
         requires ((... && std::is_move_constructible_v<Ts>) &&
                      (... && std::is_trivially_move_constructible_v<Ts>))
         = default;
-        LEV_HIDE_INSTANTIATION inline constexpr container& operator=(
-            container const&) = delete;
-        LEV_HIDE_INSTANTIATION inline constexpr container& operator=(
-            container const&) noexcept
+        LEV_HIDE_INSTANTIATION inline constexpr container& operator=(container const&) = delete;
+        LEV_HIDE_INSTANTIATION inline constexpr container& operator=(container const&) noexcept
         requires ((... && std::is_copy_assignable_v<Ts>) &&
                      (... && std::is_trivially_copy_assignable_v<Ts>))
         = default;
-        LEV_HIDE_INSTANTIATION inline constexpr container& operator=(
-            container&&) = delete;
-        LEV_HIDE_INSTANTIATION inline constexpr container& operator=(
-            container&&) noexcept
+        LEV_HIDE_INSTANTIATION inline constexpr container& operator=(container&&) = delete;
+        LEV_HIDE_INSTANTIATION inline constexpr container& operator=(container&&) noexcept
         requires ((... && std::is_move_assignable_v<Ts>) &&
                      (... && std::is_trivially_move_assignable_v<Ts>))
         = default;
@@ -417,39 +389,36 @@ class variant_base {
         }
 
         template <typename U, typename... Args>
-        LEV_HIDE_INSTANTIATION inline constexpr template_element_t<I,
-            union_type>*
+        LEV_HIDE_INSTANTIATION inline constexpr template_element_t<I, union_type>*
         construct_union(std::in_place_type_t<U> tag, Args&&... args) noexcept(
             std::is_nothrow_constructible_v<U, Args...>)
         requires (allow_external_overlap)
         {
             static_assert(
                 template_index_v<U, union_type> < template_size_v<union_type>);
-            auto ptr = std::construct_at(
+            auto ptr = __LTL construct_at(
                 addressof(union_.data), tag, std::forward<Args>(args)...);
             index_ = template_index_v<U, union_type>;
             return ptr;
         }
 
         template <size_t I, typename... Args>
-        LEV_HIDE_INSTANTIATION inline constexpr template_element_t<I,
-            union_type>*
+        LEV_HIDE_INSTANTIATION inline constexpr template_element_t<I, union_type>*
         construct_union(std::in_place_index_t<I> tag, Args&&... args) noexcept(
             std::is_nothrow_constructible_v<template_element_t<I, union_type>,
                 Args...>)
         requires (allow_external_overlap)
         {
             static_assert(I < template_size_v<union_type>);
-            auto ptr = std::construct_at(
+            auto ptr = __LTL construct_at(
                 addressof(union_.data), tag, std::forward<Args>(args)...);
             index_ = I;
             return ptr;
         }
 
-        [[LEV_MSVC no_unique_address]] conditionally_overlapable<
-            place_index_in_tail, union_type>
-            union_;
-        [[LEV_MSVC no_unique_address]] index_type index_;
+        LEV_NO_UNIQUE_ADDRESS
+        conditionally_overlapable<place_index_in_tail, union_type> union_;
+        LEV_NO_UNIQUE_ADDRESS index_type index_;
 
     private:
         LEV_HIDE_INSTANTIATION inline constexpr void destroy_member() noexcept {
@@ -462,8 +431,7 @@ class variant_base {
     };
 
     template <typename U>
-    LEV_HIDE_INSTANTIATION static inline constexpr container make_container(
-        size_t index,
+    LEV_HIDE_INSTANTIATION static inline constexpr container make_container(size_t index,
         U&& arg) noexcept([]<size_t... Is>(std::index_sequence<Is...>) {
         return (... &&
             std::is_nothrow_constructible_v<container,
@@ -484,33 +452,27 @@ class variant_base {
 
 public:
     LEV_HIDE_INSTANTIATION inline constexpr ~variant_base() noexcept = default;
-    LEV_HIDE_INSTANTIATION inline constexpr variant_base(
-        variant_base const&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr variant_base(
-        variant_base const&) noexcept((... &&
-        std::is_nothrow_copy_constructible_v<Ts>))
+    LEV_HIDE_INSTANTIATION inline constexpr variant_base(variant_base const&) = delete;
+    LEV_HIDE_INSTANTIATION inline constexpr variant_base(variant_base const&) noexcept(
+        (... && std::is_nothrow_copy_constructible_v<Ts>))
     requires ((... && std::is_copy_constructible_v<Ts>) &&
                  (... && std::is_trivially_copy_constructible_v<Ts>))
     = default;
 
-    LEV_HIDE_INSTANTIATION inline constexpr variant_base(
-        variant_base const& other) noexcept((... &&
-        std::is_nothrow_copy_constructible_v<Ts>))
+    LEV_HIDE_INSTANTIATION inline constexpr variant_base(variant_base const& other) noexcept(
+        (... && std::is_nothrow_copy_constructible_v<Ts>))
     requires ((... && std::is_copy_constructible_v<Ts>) &&
         !(... && std::is_trivially_copy_constructible_v<Ts>))
         : variant_base(variant_dispatch, other.index(), other.union_ref()) {}
 
-    LEV_HIDE_INSTANTIATION inline constexpr variant_base(
-        variant_base&&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr variant_base(
-        variant_base&&) noexcept
+    LEV_HIDE_INSTANTIATION inline constexpr variant_base(variant_base&&) = delete;
+    LEV_HIDE_INSTANTIATION inline constexpr variant_base(variant_base&&) noexcept
     requires ((... && std::is_move_constructible_v<Ts>) &&
                  (... && std::is_trivially_move_constructible_v<Ts>))
     = default;
 
-    LEV_HIDE_INSTANTIATION inline constexpr variant_base(
-        variant_base&& other) noexcept((... &&
-        std::is_nothrow_move_constructible_v<Ts>))
+    LEV_HIDE_INSTANTIATION inline constexpr variant_base(variant_base&& other) noexcept(
+        (... && std::is_nothrow_move_constructible_v<Ts>))
     requires ((... && std::is_move_constructible_v<Ts>) &&
         !(... && std::is_trivially_move_constructible_v<Ts>))
         : variant_base(
@@ -518,8 +480,7 @@ public:
 
     LEV_HIDE_INSTANTIATION inline constexpr variant_base& operator=(
         variant_base const&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr variant_base& operator=(
-        variant_base const&) noexcept
+    LEV_HIDE_INSTANTIATION inline constexpr variant_base& operator=(variant_base const&) noexcept
     requires ((... && std::is_copy_assignable_v<Ts>) &&
                  (... && std::is_trivially_copy_assignable_v<Ts>))
     = default;
@@ -548,10 +509,8 @@ public:
         return *this;
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr variant_base& operator=(
-        variant_base&&) = delete;
-    LEV_HIDE_INSTANTIATION inline constexpr variant_base& operator=(
-        variant_base&&) noexcept
+    LEV_HIDE_INSTANTIATION inline constexpr variant_base& operator=(variant_base&&) = delete;
+    LEV_HIDE_INSTANTIATION inline constexpr variant_base& operator=(variant_base&&) noexcept
     requires ((... && std::is_move_assignable_v<Ts>) &&
                  (... && std::is_trivially_move_assignable_v<Ts>))
     = default;
@@ -583,30 +542,28 @@ public:
 
 protected:
     template <typename U, typename... Args>
-    LEV_HIDE_INSTANTIATION inline constexpr explicit variant_base(
-        std::in_place_type_t<U> tag,
+    LEV_HIDE_INSTANTIATION inline constexpr explicit variant_base(std::in_place_type_t<U> tag,
         Args&&... args) noexcept(std::is_nothrow_constructible_v<container,
         std::in_place_type_t<U>, Args...>)
         : container_{std::in_place, tag, std::forward<Args>(args)...} {}
 
     template <size_t I, typename... Args>
-    LEV_HIDE_INSTANTIATION inline constexpr explicit variant_base(
-        std::in_place_index_t<I> tag,
+    LEV_HIDE_INSTANTIATION inline constexpr explicit variant_base(std::in_place_index_t<I> tag,
         Args&&... args) noexcept(is_nothrow_constructible_v<container,
         std::in_place_index_t<I>, Args...>)
         : container_{std::in_place, tag, std::forward<Args>(args)...} {}
 
     template <typename U, typename F, typename... Args>
-    LEV_HIDE_INSTANTIATION inline constexpr explicit variant_base(
-        generator_type_t<U> tag, F&& callable,
+    LEV_HIDE_INSTANTIATION inline constexpr explicit variant_base(generator_type_t<U> tag,
+        F&& callable,
         Args&&... args) noexcept(std::is_nothrow_constructible_v<container,
         generator_type_t<U>, Args...>)
         : container_{std::in_place, tag, std::forward<F>(callable),
               std::forward<Args>(args)...} {}
 
     template <size_t I, typename F, typename... Args>
-    LEV_HIDE_INSTANTIATION inline constexpr explicit variant_base(
-        generator_index_t<I> tag, F&& callable,
+    LEV_HIDE_INSTANTIATION inline constexpr explicit variant_base(generator_index_t<I> tag,
+        F&& callable,
         Args&&... args) noexcept(is_nothrow_constructible_v<container,
         generator_index_t<I>, F, Args...>)
         : container_{std::in_place, tag, std::forward<F>(callable),
@@ -616,65 +573,56 @@ protected:
         return container_.data.index_;
     }
 
-    LEV_HIDE_INSTANTIATION
-    [[nodiscard, gnu::always_inline]] inline constexpr decltype(auto)
+    LEV_HIDE_INSTANTIATION [[nodiscard]] LEV_ALWAYS_INLINE inline constexpr decltype(auto)
     union_ref() const& noexcept {
         return container_.data;
     }
 
-    LEV_HIDE_INSTANTIATION
-    [[nodiscard, gnu::always_inline]] inline constexpr decltype(auto)
+    LEV_HIDE_INSTANTIATION [[nodiscard]] LEV_ALWAYS_INLINE inline constexpr decltype(auto)
     union_ref() & noexcept {
         return container_.data;
     }
 
-    LEV_HIDE_INSTANTIATION
-    [[nodiscard, gnu::always_inline]] inline constexpr decltype(auto)
+    LEV_HIDE_INSTANTIATION [[nodiscard]] LEV_ALWAYS_INLINE inline constexpr decltype(auto)
     union_ref() const&& noexcept {
         return std::move(container_.data);
     }
 
-    LEV_HIDE_INSTANTIATION
-    [[nodiscard, gnu::always_inline]] inline constexpr decltype(auto)
+    LEV_HIDE_INSTANTIATION [[nodiscard]] LEV_ALWAYS_INLINE inline constexpr decltype(auto)
     union_ref() && noexcept {
         return std::move(container_.data);
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard, gnu::always_inline]] inline constexpr decltype(auto)
-        value_ref() const& noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] LEV_ALWAYS_INLINE inline constexpr decltype(auto)
+    value_ref() const& noexcept {
         static_assert(I < template_size_v<union_type>);
         return union_ref().template get<I>();
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard, gnu::always_inline]] inline constexpr decltype(auto)
-        value_ref() & noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] LEV_ALWAYS_INLINE inline constexpr decltype(auto)
+    value_ref() & noexcept {
         static_assert(I < template_size_v<union_type>);
         return union_ref().template get<I>();
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard, gnu::always_inline]] inline constexpr decltype(auto)
-        value_ref() const&& noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] LEV_ALWAYS_INLINE inline constexpr decltype(auto)
+    value_ref() const&& noexcept {
         static_assert(I < template_size_v<union_type>);
         return std::move(union_ref().template get<I>());
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard, gnu::always_inline]] inline constexpr decltype(auto)
-        value_ref() && noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] LEV_ALWAYS_INLINE inline constexpr decltype(auto)
+    value_ref() && noexcept {
         static_assert(I < template_size_v<union_type>);
         return std::move(union_ref().template get<I>());
     }
 
     template <size_t I, typename... Args>
-    LEV_HIDE_INSTANTIATION inline constexpr auto
-    reinitialize_value(Args&&... args) noexcept(
+    LEV_HIDE_INSTANTIATION inline constexpr auto reinitialize_value(Args&&... args) noexcept(
         std::is_nothrow_constructible_v<template_element_t<I, union_type>,
             Args...>) {
         using target_type = template_element_t<I, union_type>;
@@ -713,28 +661,25 @@ protected:
 
 private:
     template <typename U>
-    LEV_HIDE_INSTANTIATION inline constexpr variant_base(variant_dispatch_t tag,
-        size_t index,
+    LEV_HIDE_INSTANTIATION inline constexpr variant_base(variant_dispatch_t tag, size_t index,
         U&& arg) noexcept(std::is_nothrow_constructible_v<container,
         variant_dispatch_t, size_t, U>)
     requires (allow_external_overlap)
         : container_{std::in_place, tag, index, std::forward<U>(arg)} {}
 
     template <typename U>
-    LEV_HIDE_INSTANTIATION inline constexpr variant_base(variant_dispatch_t,
-        size_t index,
+    LEV_HIDE_INSTANTIATION inline constexpr variant_base(variant_dispatch_t, size_t index,
         U&& arg) noexcept(noexcept(make_container(index, std::declval<U>())))
     requires (place_index_in_tail)
         : container_{generator,
               [&]() { return make_container(index, std::forward<U>(arg)); }} {}
 
     template <size_t I, typename... Args>
-    LEV_HIDE_INSTANTIATION inline constexpr auto
-    construct_value(Args&&... args) noexcept(
+    LEV_HIDE_INSTANTIATION inline constexpr auto construct_value(Args&&... args) noexcept(
         std::is_nothrow_constructible_v<template_element_t<I, union_type>,
             Args...>) {
         if constexpr (place_index_in_tail) {
-            std::construct_at(addressof(container_.data),
+            __LTL construct_at(addressof(container_.data),
                 std::in_place_index<I>, std::forward<Args>(args)...);
             return addressof(value_ref<I>());
         } else {
@@ -749,7 +694,7 @@ private:
         std::is_nothrow_invocable_r_v<template_element_t<I, union_type>, F,
             Args...>) {
         if constexpr (place_index_in_tail) {
-            std::construct_at(addressof(container_.data), generator_index<I>,
+            __LTL construct_at(addressof(container_.data), generator_index<I>,
                 std::forward<F>(callable), std::forward<Args>(args)...);
             return addressof(value_ref<I>());
         } else {
@@ -766,9 +711,8 @@ private:
         }
     }
 
-    [[LEV_MSVC no_unique_address]] conditionally_overlapable<
-        allow_external_overlap, container>
-        container_;
+    LEV_NO_UNIQUE_ADDRESS
+    conditionally_overlapable<allow_external_overlap, container> container_;
 };
 
 template <typename T>
@@ -819,26 +763,22 @@ using resolve_conversion_t =
 }
 
 template <typename... Ts>
-[[nodiscard, gnu::always_inline]] auto&& as_variant(
-    variant<Ts...>& value) noexcept {
+[[nodiscard]] LEV_ALWAYS_INLINE auto&& as_variant(variant<Ts...>& value) noexcept {
     return value;
 }
 
 template <typename... Ts>
-[[nodiscard, gnu::always_inline]] auto&& as_variant(
-    variant<Ts...> const& value) noexcept {
+[[nodiscard]] LEV_ALWAYS_INLINE auto&& as_variant(variant<Ts...> const& value) noexcept {
     return value;
 }
 
 template <typename... Ts>
-[[nodiscard, gnu::always_inline]] auto&& as_variant(
-    variant<Ts...>&& value) noexcept {
+[[nodiscard]] LEV_ALWAYS_INLINE auto&& as_variant(variant<Ts...>&& value) noexcept {
     return std::move(value);
 }
 
 template <typename... Ts>
-[[nodiscard, gnu::always_inline]] auto&& as_variant(
-    variant<Ts...> const&& value) noexcept {
+[[nodiscard]] LEV_ALWAYS_INLINE auto&& as_variant(variant<Ts...> const&& value) noexcept {
     return std::move(value);
 }
 
@@ -862,10 +802,10 @@ concept visitable_by_r = requires(F&& callable, V&& value) {
 };
 
 template <typename T>
-LEV_HIDE_INSTANTIATION inline constexpr auto visit_table_for =
-    []<size_t... Is>(std::index_sequence<Is...>) {
-        return jump_table<Is..., variant_npos>{};
-    }(std::make_index_sequence<template_size_v<T>>{});
+LEV_HIDE_INSTANTIATION inline constexpr auto visit_table_for = []<size_t... Is>(
+                                                  std::index_sequence<Is...>) {
+    return jump_table<Is..., variant_npos>{};
+}(std::make_index_sequence<template_size_v<T>>{});
 
 } // namespace details
 
@@ -888,9 +828,8 @@ public:
     requires (std::is_default_constructible<first_type>)
         : base_type{std::in_place_index<0>} {}
 
-    LEV_HIDE_INSTANTIATION inline constexpr variant(variant const&
-            other) noexcept(std::is_nothrow_copy_constructible_v<base_type>) =
-        default;
+    LEV_HIDE_INSTANTIATION inline constexpr variant(variant const& other) noexcept(
+        std::is_nothrow_copy_constructible_v<base_type>) = default;
     LEV_HIDE_INSTANTIATION inline constexpr variant(variant&& other) noexcept(
         std::is_nothrow_move_constructible_v<base_type>) = default;
 
@@ -904,14 +843,13 @@ public:
               std::forward<U>(arg)} {}
 
     template <typename U, typename... Args>
-    LEV_HIDE_INSTANTIATION explicit inline constexpr variant(
-        std::in_place_type_t<U> tag,
+    LEV_HIDE_INSTANTIATION explicit inline constexpr variant(std::in_place_type_t<U> tag,
         Args&&... args) noexcept(std::is_nothrow_constructible_v<U, Args...>)
         : base_type{tag, std::forward<Args>(args)...} {}
 
     template <typename U, typename V, typename... Args>
-    LEV_HIDE_INSTANTIATION explicit inline constexpr variant(
-        std::in_place_type_t<U> tag, std::initializer_list<V> il,
+    LEV_HIDE_INSTANTIATION explicit inline constexpr variant(std::in_place_type_t<U> tag,
+        std::initializer_list<V> il,
         Args&&... args) noexcept(std::is_nothrow_constructible_v<U,
         std::initializer_list<V>, Args...>)
         : base_type{tag, il, std::forward<Args>(args)...} {}
@@ -925,9 +863,8 @@ public:
 
     template <size_t I, typename U, typename... Args>
     requires requires { typename template_element_t<I, variant>; }
-    LEV_HIDE_INSTANTIATION explicit inline constexpr variant(
-        std::in_place_index_t<I> tag, std::initializer_list<U> il,
-        Args&&... args) noexcept(std::
+    LEV_HIDE_INSTANTIATION explicit inline constexpr variant(std::in_place_index_t<I> tag,
+        std::initializer_list<U> il, Args&&... args) noexcept(std::
             is_nothrow_constructible_v<template_element_t<I, variant>,
                 std::initializer_list<U>, Args...>)
         : base_type{tag, il, std::forward<Args>(args)...} {}
@@ -935,8 +872,8 @@ public:
     template <typename U, typename F, typename... Args>
     requires requires(template_count_v<U, variant> == 1 &&
         std::is_invocable_r_v<U, F, Args...>)
-    LEV_HIDE_INSTANTIATION explicit inline constexpr variant(
-        generator_type_t<U> tag, F&& callable,
+    LEV_HIDE_INSTANTIATION explicit inline constexpr variant(generator_type_t<U> tag,
+        F&& callable,
         Args&&... args) noexcept(std::is_nothrow_invocable_r_v<U, F, Args...>)
         : base_type{
               tag, std::forward<F>(callable), std::forward<Args>(args)...} {}
@@ -972,17 +909,14 @@ public:
 
     LEV_HIDE_INSTANTIATION inline constexpr ~variant() = default;
 
-    LEV_HIDE_INSTANTIATION inline constexpr variant&
-    operator=(variant const& other) noexcept(
+    LEV_HIDE_INSTANTIATION inline constexpr variant& operator=(variant const& other) noexcept(
         std::is_nothrow_copy_assignable_v<base_type>) = default;
-    LEV_HIDE_INSTANTIATION inline constexpr variant&
-    operator=(variant&& other) noexcept(
+    LEV_HIDE_INSTANTIATION inline constexpr variant& operator=(variant&& other) noexcept(
         std::is_nothrow_move_assignable_v<base_type>) = default;
 
     template <typename U>
     requires requires { typename details::resolve_conversion_t<U, variant>; }
-    LEV_HIDE_INSTANTIATION inline constexpr variant&
-    operator=(U&& arg) noexcept(
+    LEV_HIDE_INSTANTIATION inline constexpr variant& operator=(U&& arg) noexcept(
         std::is_nothrow_assignable_v<details::resolve_conversion_t<U, variant>&,
             U> &&
         std::is_nothrow_constructible_v<
@@ -1011,8 +945,8 @@ public:
     template <typename U, typename F, typename... Args>
     requires (template_count_v<U, variant> == 1 &&
         std::is_invocable_r_v<U, F, Args...>)
-    LEV_HIDE_INSTANTIATION inline U& generate(F&& callable,
-        Args&&... args) noexcept(std::is_nothrow_invocable_r_v<U, F, Args...>) {
+    LEV_HIDE_INSTANTIATION inline U& generate(F&& callable, Args&&... args) noexcept(
+        std::is_nothrow_invocable_r_v<U, F, Args...>) {
         return generate<template_index_v<U, variant>>(
             std::forward<F>(callable), std::forward<Args...>(args));
     }
@@ -1100,18 +1034,17 @@ public:
     }
 
     template <typename T>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr bool
-    holds_alternative(variant const&) noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr bool holds_alternative(
+        variant const&) noexcept {
         static_assert(template_count_v<T, variant> == 1, "Invalid alternative");
         return index() == template_index_v<T, variant>;
     }
 
     template <size_t I>
     requires requires { typename template_element_t<I, variant>; }
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard]] friend inline constexpr template_element_t<I,
-            variant> const&
-        get(variant const& val) {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr template_element_t<I,
+        variant> const&
+    get(variant const& val) {
         if (val.index() != I) {
             details::throw_bad_variant_access();
         }
@@ -1120,9 +1053,8 @@ public:
 
     template <size_t I>
     requires requires { typename template_element_t<I, variant>; }
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard]] friend inline constexpr template_element_t<I, variant>&
-        get(variant& val) {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr template_element_t<I, variant>&
+    get(variant& val) {
         if (val.index() != I) {
             details::throw_bad_variant_access();
         }
@@ -1131,10 +1063,9 @@ public:
 
     template <size_t I>
     requires requires { typename template_element_t<I, variant>; }
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard]] friend inline constexpr template_element_t<I,
-            variant> const&&
-        get(variant const&& val) {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr template_element_t<I,
+        variant> const&&
+    get(variant const&& val) {
         if (val.index() != I) {
             details::throw_bad_variant_access();
         }
@@ -1144,9 +1075,8 @@ public:
 
     template <size_t I>
     requires requires { typename template_element_t<I, variant>; }
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard]] friend inline constexpr template_element_t<I, variant>&&
-        get(variant&& val) {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr template_element_t<I, variant>&&
+    get(variant&& val) {
         if (val.index() != I) {
             details::throw_bad_variant_access();
         }
@@ -1162,32 +1092,28 @@ public:
     }
 
     template <typename T>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr T& get(
-        variant& val) {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr T& get(variant& val) {
         static_assert(template_count_v<T, variant> == 1, "Invalid alternative");
         return get<template_index_v<T, variant>>(val);
     }
 
     template <typename T>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr T&& get(
-        variant&& val) {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr T&& get(variant&& val) {
         static_assert(template_count_v<T, variant> == 1, "Invalid alternative");
         return get<template_index_v<T, variant>>(std::move(val));
     }
 
     template <typename T>
-    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr T&& get(
-        variant const&& val) {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr T&& get(variant const&& val) {
         static_assert(template_count_v<T, variant> == 1, "Invalid alternative");
         return get<template_index_v<T, variant>>(std::move(val));
     }
 
     template <size_t I>
     requires requires { typename template_element_t<I, variant>; }
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard]] friend inline constexpr std::add_pointer_t<
-            template_element_t<I, variant> const>
-        get_if(variant const* val) noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr std::add_pointer_t<
+        template_element_t<I, variant> const>
+    get_if(variant const* val) noexcept {
         if (val && val->index() == I) {
             return addressof(val.template value_ref<I>());
         }
@@ -1197,10 +1123,9 @@ public:
 
     template <size_t I>
     requires requires { typename template_element_t<I, variant>; }
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard]] friend inline constexpr std::add_pointer_t<
-            template_element_t<I, variant>>
-        get_if(variant* val) noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr std::add_pointer_t<
+        template_element_t<I, variant>>
+    get_if(variant* val) noexcept {
         if (val && val->index() == I) {
             return addressof(val.template value_ref<I>());
         }
@@ -1208,17 +1133,15 @@ public:
     }
 
     template <typename T>
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard]] friend inline constexpr std::add_pointer_t<T const>
-        get_if(variant const* val) noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr std::add_pointer_t<T const>
+    get_if(variant const* val) noexcept {
         static_assert(template_count_v<T, variant> == 1, "Invalid alternative");
         return get_if<template_index_v<T, variant>>(val);
     }
 
     template <typename T>
-    LEV_HIDE_INSTANTIATION
-        [[nodiscard]] friend inline constexpr std::add_pointer_t<T>
-        get_if(variant* val) noexcept {
+    LEV_HIDE_INSTANTIATION [[nodiscard]] friend inline constexpr std::add_pointer_t<T> get_if(
+        variant* val) noexcept {
         static_assert(template_count_v<T, variant> == 1, "Invalid alternative");
         return get_if<template_index_v<T, variant>>(val);
     }
@@ -1354,8 +1277,8 @@ public:
 
 namespace details {
 template <typename F, typename V, typename... Vs>
-LEV_HIDE_INSTANTIATION [[gnu::flatten]] inline constexpr decltype(auto)
-variant_visitor(F&& callable, V&& value, Vs&&... values) {
+LEV_HIDE_INSTANTIATION [[gnu::flatten]] inline constexpr decltype(auto) variant_visitor(
+    F&& callable, V&& value, Vs&&... values) {
     if constexpr (sizeof...(Vs) == 0) {
         return std::forward<V>(value).visit(std::forward<F>(callable));
     } else {
@@ -1402,8 +1325,7 @@ LEV_HIDE_INSTANTIATION [[gnu::flatten]] inline constexpr R variant_visitor(
 
 template <typename F, typename... Vs>
 requires requires { (..., details::as_variant(std::declval<Vs>())); }
-LEV_HIDE_INSTANTIATION inline constexpr decltype(auto) visit(
-    F&& callable, Vs&&... values) {
+LEV_HIDE_INSTANTIATION inline constexpr decltype(auto) visit(F&& callable, Vs&&... values) {
     if constexpr (sizeof...(Vs) == 0) {
         return std::invoke_r<R>(std::forward<F>(callable));
     } else {

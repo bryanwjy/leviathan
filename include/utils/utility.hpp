@@ -6,14 +6,80 @@
 #include <concepts>
 #include <utility>
 
+#if defined(__clang__) || defined(__INTEL_LLVM_COMPILER)
+#  include <new>
+/**
+ * The Clang frontend allows constexpr placement new within the std namespace
+ */
+namespace std {
+/* Technically UNDEFINED BEHAVIOUR */
+template <typename T, typename... Args>
+LEV_HIDE_INSTANTIATION inline constexpr T* __lev_construct_at_impl(T* location,
+    Args&&... args) noexcept(noexcept(::new((void*)0) T{declval<Args>()...})) {
+    // Clang front-end achieve constexpr placement-new by special-casing
+    // namespace std
+    return ::new (location) T{forward<Args>(args)...};
+}
+} // namespace std
+namespace ltl {
+template <typename T, typename... Args>
+requires requires(
+    void* ptr, Args... args) { ::new (ptr) T(forward<Args>(args)); }
+LEV_HIDE_INSTANTIATION inline constexpr T* construct_at(T* location, Args&&... args) noexcept(
+    noexcept(::std::__lev_construct_at_impl(location, std::declval<Args>()...)))
+    LEV_CONTRACT_PRE(location != nullptr) {
+    LEV_ASSERT(location != nullptr);
+    return ::std::__lev_construct_at_impl(
+        location, std::forward<Args>(args)...);
+}
+} // namespace ltl
+#elif defined(__GNUC__)
+// GCC achieve constexpr placement-new by special-casing std::construct_at
+#  include <bits/stl_construct.h>
+namespace ltl {
+using std::construct_at;
+}
+#elif defined(_MSC_VER)
+#  if __has_cpp_attributes(msvc::constexpr)
+#    include <new>
+namespace ltl {
+template <typename T, typename... Args>
+requires requires(
+    void* ptr, Args... args) { ::new (ptr) T(forward<Args>(args)); }
+__UTL_HIDE_FROM_ABI inline constexpr T* construct_at(
+    T* location, Args&&... args) noexcept(noexcept(::new((void*)0)
+        T{std::declval<Args>()...})) LEV_CONTRACT_PRE(location != nullptr) {
+    LEV_ASSERT(location != nullptr);
+    // MSVC achieve constexpr placement-new by using a custom attribute
+    [[msvc::constexpr]] return ::new (location) T{std::forward<Args>(args)...};
+}
+} // namespace ltl
+#  else
+#    error "Unsupported"
+#  endif
+#else
+#  error "Unsupported"
+#endif
+
 namespace ltl {
 
 template <typename T>
 T const* addressof(T const&&) = delete;
 
 template <typename T>
-LEV_HIDDEN [[nodiscard, gnu::always_inline]] T* addressof(T& arg) noexcept {
+LEV_HIDDEN [[nodiscard]] LEV_ALWAYS_INLINE T* addressof(T& arg) noexcept {
     return __builtin_addressof(arg);
+}
+
+template <typename T>
+LEV_HIDDEN constexpr void destroy_at(T* ptr) noexcept {
+    if constexpr (std::is_array_v<T>) {
+        for (auto& item : *ptr) {
+            (destroy_at)(addressof(item));
+        }
+    } else {
+        ptr->~T();
+    }
 }
 
 template <typename T, typename U>
@@ -56,9 +122,7 @@ LEV_HIDDEN [[nodiscard]] inline constexpr T exchange(
 
 template <auto S>
 struct LEV_HIDDEN static_storage {
-    LEV_HIDE_INSTANTIATION static inline constinit std::remove_const_t<
-        decltype(S)>
-        value = S;
+    LEV_HIDE_INSTANTIATION static inline constinit std::remove_const_t<decltype(S)> value = S;
 };
 
 template <auto S>
@@ -101,19 +165,16 @@ public:
     constexpr explicit get_element_t() noexcept = default;
 
     template <has_adl_get<I> T>
-    LEV_HIDE_INSTANTIATION
-        [[gnu::always_inline, nodiscard]] inline constexpr decltype(auto)
-        operator()(T&& t LEV_LIFETIMEBOUND) const
-        noexcept(nothrow_adl_get_v<T>) {
+    LEV_HIDE_INSTANTIATION [[gnu::always_inline, nodiscard]] inline constexpr decltype(auto)
+    operator()(T&& t LEV_LIFETIMEBOUND) const noexcept(nothrow_adl_get_v<T>) {
         return get<I>(std::forward<T>(t));
     }
 
     template <has_member_get<I> T>
     requires (!has_adl_get<T, I>)
-    LEV_HIDE_INSTANTIATION
-        [[gnu::always_inline, nodiscard]] inline constexpr decltype(auto)
-        operator()(T&& t LEV_LIFETIMEBOUND) const
-        noexcept(nothrow_member_get_v<T>) {
+    LEV_HIDE_INSTANTIATION [[gnu::always_inline, nodiscard]] inline constexpr decltype(auto)
+    operator()(T&& t
+            LEV_LIFETIMEBOUND) const noexcept(nothrow_member_get_v<T>) {
         return std::forward<T>(t).template get<I>();
     }
 };

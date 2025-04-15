@@ -87,6 +87,7 @@ IncludeCategories:
   - Regex:           '^<.*>'
     Priority:        40
 IfMacros: ['LEV_TRY']
+AttributeMacros: []
 Macros:
 - LEV_CATCH(X)=else if ([](X){ return true; }())
 - PyVarObject_HEAD_INIT(X,Y)={X,Y},
@@ -99,6 +100,13 @@ Macros:
 - LEV_DEF(X)=void X()
 - LEV_CONTRACT_PRE(X)=[[X]]
 - LEV_CONTRACT_POST(X)=[[X]]
+- '__LTL=::ltl::'
+- '__LEV=::lev::'
+- LEV_HIDE_INSTANTIATION=[[x]]
+- LEV_LIFETIMEBOUND=[[x]]
+- LEV_CONST=[[x]]
+- LEV_PURE=[[x]]
+- LEV_ALWAYS_INLINE=[[x]]
 # - LEV_CONTRACT_PRE(X)=pre(X)
 # - LEV_CONTRACT_POST(X)=post(X)
 

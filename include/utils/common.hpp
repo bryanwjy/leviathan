@@ -30,6 +30,14 @@
 #  define LEV_MSVC
 #endif
 
+#if __has_cpp_attribute(msvc::no_unique_address)
+#  define LEV_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
+#elif __has_cpp_attribute(no_unique_address)
+#  define LEV_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#else
+#  error "Compilation will result in invalid ABI"
+#endif
+
 #if __has_cpp_attribute(msvc::lifetimebound)
 #  define LEV_LIFETIMEBOUND [[msvc::lifetimebound]]
 #elif __has_cpp_attribute( \
@@ -64,6 +72,12 @@
 #  define LEV_CONST [[msvc::const]]
 #else
 #  define LEV_CONST
+#endif
+
+#if __has_cpp_attribute(gnu::always_inline)
+#  define LEV_ALWAYS_INLINE [[gnu::always_inline]]
+#else
+#  define LEV_ALWAYS_INLINE __forceinline
 #endif
 
 #ifdef __GNUC__ // GCC 4.8+, Clang, Intel and other compilers compatible with

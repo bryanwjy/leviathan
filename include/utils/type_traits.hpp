@@ -240,4 +240,7 @@ concept cv_convertible_to = requires {
     requires std::same_as<std::remove_cv_t<To>, std::remove_cv_t<From>>;
     requires std::convertible_to<From*, To*>;
 };
+
+template <typename T, typename U>
+concept different_from = !same_as<T, U>;
 } // namespace ltl

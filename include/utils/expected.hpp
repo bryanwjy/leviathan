@@ -38,27 +38,28 @@ namespace expected {
 
 template <typename E, typename U>
 requires std::is_constructible_v<E, U>
-[[noreturn]] void throw_bad_access(U&& arg) {
+LEV_HIDDEN [[noreturn]] void throw_bad_access(U&& arg) {
     throw bad_expected_access<E>(std::forward<U>(arg));
 }
 
 struct transforming_t {
-    LEV_HIDE_INSTANTIATION explicit inline constexpr transforming_t() noexcept = default;
+    LEV_HIDDEN explicit inline constexpr transforming_t() noexcept = default;
 };
 LEV_HIDDEN inline constexpr transforming_t transforming{};
 struct transforming_error_t {
-    LEV_HIDE_INSTANTIATION explicit inline constexpr transforming_error_t() noexcept = default;
+    LEV_HIDDEN explicit inline constexpr transforming_error_t() noexcept =
+        default;
 };
 LEV_HIDDEN inline constexpr transforming_error_t transforming_error{};
 
 struct converting_t {
-    LEV_HIDE_INSTANTIATION explicit constexpr converting_t() noexcept = default;
+    LEV_HIDDEN explicit constexpr converting_t() noexcept = default;
 };
 LEV_HIDDEN inline constexpr converting_t converting{};
 struct empty_t {
-    LEV_HIDE_INSTANTIATION inline constexpr empty_t() noexcept = default;
+    LEV_HIDDEN inline constexpr empty_t() noexcept = default;
     template <typename... Ts>
-    LEV_HIDE_INSTANTIATION inline constexpr empty_t(Ts&&...) noexcept {}
+    LEV_HIDDEN inline constexpr empty_t(Ts&&...) noexcept {}
 };
 LEV_HIDDEN inline constexpr empty_t empty{};
 

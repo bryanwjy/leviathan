@@ -76,51 +76,51 @@ public:
         Args...>) inline constexpr element_reference(Args&&... args) noexcept
         : Impl{std::forward<Args>(args)...} {}
 
-    LEV_HIDE_INSTANTIATION
-    inline constexpr unmanaged_ptr<type> get() const
-        noexcept(noexcept(Impl::get_pointer()))
+    LEV_HIDE_INSTANTIATION inline constexpr unmanaged_ptr<type> get() const noexcept
     requires requires(element_reference const& ref) {
-        { impl.get_pointer() } -> std::convertible_to<unmanaged_ptr<type>>;
+        {
+            impl.get_pointer()
+        } noexcept -> std::convertible_to<unmanaged_ptr<type>>;
     }
     {
         return static_cast<unmanaged_ptr<type>>(Impl::get_pointer());
     }
 
     LEV_HIDE_INSTANTIATION inline constexpr operator pointer() const noexcept
-    requires requires(element_reference const& ref) { impl.get(); }
+    requires requires(element_reference const& self) { self.get(); }
     {
         return get();
     }
 
     LEV_HIDE_INSTANTIATION inline constexpr pointer operator->() const noexcept
-    requires requires(element_reference const& ref) { impl.get(); }
+    requires requires(element_reference const& self) { self.get(); }
     {
         return get();
     }
 
     LEV_HIDE_INSTANTIATION inline constexpr reference operator*() const
-        noexcept(noexcept(Impl::get_reference()))
-    requires requires(element_reference const& impl) {
-        { impl.get_reference() } -> std::convertible_to<reference>;
+        noexcept(noexcept(static_cast<reference>(Impl::get_reference())))
+    requires requires(element_reference const& self) {
+        { self.get_reference() } -> std::convertible_to<reference>;
     }
     {
         return static_cast<reference>(Impl::get_reference());
     }
 
-    LEV_HIDE_INSTANTIATION explicit inline constexpr
-    operator bool() const noexcept
-    requires requires(element_reference const& ref) {
-        { impl.valid() } -> std::convertible_to<bool>;
+    LEV_HIDE_INSTANTIATION explicit inline constexpr operator bool() const noexcept
+    requires requires(element_reference const& self) {
+        { self.valid() } -> std::convertible_to<bool>;
     }
     {
         return static_cast<bool>(Impl::valid());
     }
 
     template <typename U>
+    LEV_HIDE_INSTANTIATION inline constexpr element_reference& operator=(U&& val) noexcept(
+        noexcept(Impl::set_pointer(std::declval<U>())))
     requires requires(
-        element_reference& impl) { impl.set_pointer(std::declval<U>()); }
-    LEV_HIDE_INSTANTIATION inline constexpr element_reference& operator=(
-        U&& val) noexcept(noexcept(Impl::set_pointer(std::declval<U>()))) {
+        element_reference& self) { self.set_pointer(std::declval<U>()); }
+    {
         Impl::set_pointer(std::forward(val));
         return *this;
     }

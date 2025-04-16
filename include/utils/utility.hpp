@@ -82,6 +82,12 @@ LEV_HIDDEN constexpr void destroy_at(T* ptr) noexcept {
     }
 }
 
+template <typename T>
+requires std::is_enum_v<T>
+LEV_HIDDEN constexpr auto as_underlying(T val) noexcept {
+    return static_cast<std::underlying_type_t<T>>(val);
+}
+
 template <typename T, typename U>
 LEV_HIDDEN [[nodiscard]] constexpr auto forward_like(U&& u) noexcept
     -> std::add_rvalue_reference_t<

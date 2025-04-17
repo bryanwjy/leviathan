@@ -56,19 +56,11 @@ struct container_flags_t :
 
 namespace details::container {
 template <typename O, typename P>
-concept has_flag = (O::value & P::value) == P::value;
+concept has_flag = ;
 } // namespace details::container
 
 template <typename T>
 concept container_flags_type = details::container::is_flags_type_v<T>;
-
-template <typename O, typename... Ps>
-concept with_container_flags = (container_flag_type<O> && ... &&
-    container_flag_type<Ps>)&&(... && details::container::has_flag<O, Ps>);
-
-template <typename O, typename... Ps>
-concept without_container_flags = (container_flag_type<O> && ... &&
-    container_flag_type<Ps>)&&(... && (!details::container::has_flag<O, Ps>));
 
 namespace container_flags {
 
@@ -88,6 +80,70 @@ LEV_HIDDEN inline constexpr readonly_t readonly{};
 
 LEV_HIDDEN inline constexpr nothrow_t nothrow{};
 
+template <typename T>
+struct acquires {};
+template <typename T>
+struct removes {};
+template <typename T>
+struct maintains {};
+template <typename T>
+struct excludes {};
+
 } // namespace container_flags
+
+namespace details::container {
+
+template <typename From, typename To, typename V>
+LEV_HIDDEN inline constexpr bool mutation_v = false;
+
+template <typename O, typename P>
+concept with_flag = container_flag_type<O> && container_flag_type<P> &&
+    (O::value & P::value) == P::value;
+
+template <typename O, typename P>
+concept without_flag = container_flag_type<O> && container_flag_type<P> &&
+    (O::value & P::value) == flags::none;
+
+template <typename From, typename To, typename V>
+concept acquisition = without_flag<From, V> && with_flag<To, V>;
+template <typename From, typename To, typename V>
+concept removal = with_flag<From, V> && without_flag<To, V>;
+template <typename From, typename To, typename V>
+concept maintenance = with_flag<From, V> && with_flag<To, V>;
+template <typename From, typename To, typename V>
+concept exclusion = without_flag<From, V> && without_flag<To, V>;
+
+template <container_flags_type V, with_container_flags<V> To,
+    without_container_flags<V> From>
+LEV_HIDDEN inline constexpr bool
+    mutation_v<From, To, container_flags::subsumes<V>> = true;
+
+template <container_flags_type V, without_container_flags<V> To,
+    with_container_flags<V> From>
+LEV_HIDDEN inline constexpr bool
+    mutation_v<From, To, container_flags::discards<V>> = true;
+
+template <container_flags_type V, with_container_flags<V> To,
+    with_container_flags<V> From>
+LEV_HIDDEN inline constexpr bool
+    mutation_v<From, To, container_flags::maintains<V>> = true;
+
+template <container_flags_type V, without_container_flags<V> To,
+    without_container_flags<V> From>
+LEV_HIDDEN inline constexpr bool
+    mutation_v<From, To, container_flags::excludes<V>> = true;
+
+} // namespace details::container
+
+template <typename O, typename... Ps>
+concept with_container_flags =
+    (... && container_flag_type<Ps>)&&details::container::with_flag<O,
+        (... | Ps::value)>;
+
+template <typename O, typename... Ps>
+concept without_container_flags =
+    (... && container_flag_type<Ps>)&&details::container::without_flag<O,
+        (... | Ps::value)>;
+
 } // namespace py
 } // namespace lev

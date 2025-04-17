@@ -51,12 +51,9 @@ class LEV_API basic_list<T, P> {
 
     template <container_flags_type auto O>
     LEV_HIDE_INSTANTIATION static constexpr bool is_explicit_construction_v =
-        (with_container_flags<decltype(O), borrowed_flag> &&
-            without_container_flags<flags_type, borrowed_flag>) ||
-        (with_container_flags<decltype(O), readonly_flag> &&
-            without_container_flags<flags_type, readonly_flag>) ||
-        (without_container_flags<decltype(O), nothrow_flag> &&
-            with_container_flags<flags_type, nothrow_flag>);
+        details::container::removal<decltype(O), flags_type, borrowed_flag> ||
+        details::container::removal<decltype(O), flags_type, readonly_flag> ||
+        details::container::acquisition<decltype(O), flags_type, nothrow_flag>;
 
     using span_type =
         std::conditional_t<without_container_flags<flags_type, readonly_flag>,
@@ -65,7 +62,7 @@ class LEV_API basic_list<T, P> {
         details::random_access_reference<T, cast_policy::safe>>;
     using instance_type =
         std::conditional_t<with_container_flags<flags_type, borrowed_flag>,
-            unmanaged_ptr<PyDictObject>, python_ptr<PyDictObject>>;
+            unmanaged_ptr<PyListObject>, python_ptr<PyListObject>>;
 
     template <typename T>
     using result_type =
@@ -260,58 +257,67 @@ public:
     LEV_HIDE_INSTANTIATION [[clang::reinitializes]] constexpr inline basic_list& operator=(
         basic_list&&) noexcept = default;
 
-    LEV_HIDE_INSTANTIATION inline constexpr basic_list(python_ptr<PyDictObject>&& ptr) noexcept
+    LEV_HIDE_INSTANTIATION inline constexpr basic_list(python_ptr<PyListObject>&& ptr) noexcept
     requires without_container_flags<flags_type, borrowed_flag>
         : basic_list(private_tag, std::move(ptr)) {}
 
     LEV_HIDE_INSTANTIATION inline constexpr basic_list(
-        python_ptr<PyDictObject> const& ptr) noexcept
+        python_ptr<PyListObject> const& ptr) noexcept
         : basic_list(private_tag, ptr) {}
 
     LEV_HIDE_INSTANTIATION inline constexpr basic_list(
-        python_ptr<PyDictObject> const& ptr LEV_LIFETIMEBOUND) noexcept
+        python_ptr<PyListObject> const& ptr LEV_LIFETIMEBOUND) noexcept
     requires with_container_flags<flags_type, borrowed_flag>
         : basic_list(private_tag, ptr.get()) {}
 
     LEV_HIDE_INSTANTIATION explicit inline constexpr basic_list(
-        unmanaged_ptr<PyDictObject> ptr) noexcept
+        unmanaged_ptr<PyListObject> ptr) noexcept
         : basic_list{__LEV adopt(ptr)} {}
 
-    LEV_HIDE_INSTANTIATION inline constexpr basic_list(unmanaged_ptr<PyDictObject> ptr) noexcept
+    LEV_HIDE_INSTANTIATION inline constexpr basic_list(unmanaged_ptr<PyListObject> ptr) noexcept
     requires with_container_flags<flags_type, borrowed_flag>
         : basic_list{ptr} {}
 
     template <pyobj_derived_from<T> U,
-        without_container_flags<borrowed_flag> auto Opt>
+        details::container::exclusion<flags_type, borrowed_flag> auto Opt>
     LEV_HIDE_INSTANTIATION explicit(is_explicit_construction_v<Opt>) inline constexpr basic_list(
         basic_list<U, Opt>&& other) noexcept
-    requires without_container_flags<flags_type, borrowed_flag>
+    requires (!details::container::acquisition<decltype(Opt), flags_type,
+                  nothrow_flag> &&
+        !details::container::removal<decltype(Opt), flags_type, readonly_flag>)
         : basic_list{std::move(other.instance_)} {}
 
-    template <pyobj_derived_from<T> U,
-        without_container_flags<borrowed_flag> auto Opt>
+    template <pyobj_derived_from<T> U, container_flags_type auto Opt>
     LEV_HIDE_INSTANTIATION explicit(is_explicit_construction_v<Opt>) inline constexpr basic_list(
         basic_list<U, Opt> const& other) noexcept
+    requires (!details::container::acquisition<decltype(Opt), flags_type,
+                  nothrow_flag> &&
+        !details::container::removal<decltype(Opt), flags_type, readonly_flag>)
         : basic_list{other.instance_} {}
 
     template <pyobj_derived_from<T> U,
-        without_container_flags<borrowed_flag> auto Opt>
-    LEV_HIDE_INSTANTIATION explicit(is_explicit_construction_v<Opt>) inline constexpr basic_list(
+        details::container::acquisition<flags_type, borrowed_flag> auto Opt>
+    LEV_HIDE_INSTANTIATION inline constexpr basic_list(
         basic_list<U, Opt> const& other LEV_LIFETIMEBOUND) noexcept
-    requires with_container_flags<flags_type, borrowed_flag>
+    requires (!details::container::acquisition<decltype(Opt), flags_type,
+                  nothrow_flag> &&
+        !details::container::removal<decltype(Opt), flags_type, readonly_flag>)
         : basic_list{other.instance()} {}
 
-    template <pyobj_derived_from<T> U,
-        with_container_flags<borrowed_flag> auto Opt>
+    template <pyobj_derived_from<T> U, container_flags_type auto Opt>
     LEV_HIDE_INSTANTIATION explicit(is_explicit_construction_v<Opt>) inline constexpr basic_list(
         basic_list<U, Opt> other) noexcept
+    requires (!details::container::acquisition<decltype(Opt), flags_type,
+                  nothrow_flag> &&
+        !details::container::removal<decltype(Opt), flags_type, readonly_flag>)
         : basic_list{__LEV adopt(other.instance())} {}
 
     template <pyobj_derived_from<T> U,
-        with_container_flags<borrowed_flag> auto Opt>
-    LEV_HIDE_INSTANTIATION explicit(is_explicit_construction_v<Opt>) inline constexpr basic_list(
-        basic_list<U, Opt> other) noexcept
-    requires with_container_flags<flags_type, borrowed_flag>
+        details::container::maintenance<flags_type, borrowed_flag> auto Opt>
+    LEV_HIDE_INSTANTIATION inline constexpr basic_list(basic_list<U, Opt> other) noexcept
+    requires (!details::container::acquisition<decltype(Opt), flags_type,
+                  nothrow_flag> &&
+        !details::container::removal<decltype(Opt), flags_type, readonly_flag>)
         : basic_list{other.instance()} {}
 
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto begin() const noexcept LEV_LIFETIMEBOUND {

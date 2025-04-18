@@ -145,5 +145,12 @@ concept without_container_flags =
     (... && container_flag_type<Ps>)&&details::container::without_flag<O,
         (... | Ps::value)>;
 
+template <typename From, typename To>
+concept container_flags_convertible_to =
+    !details::container::acquisition<std::remove_cv_t<From>, To,
+        container_flags::nothrow_t> &&
+    !details::container::removal<std::remove_cv_t<From>, To,
+        container_flags::readonly_t>;
+
 } // namespace py
 } // namespace lev

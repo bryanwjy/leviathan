@@ -66,10 +66,20 @@ namespace container_flags {
 
 using none_t = container_flags_t<details::container::flags::none>;
 
+/**
+ * The container adaptor contains a borrowed reference
+ */
 using borrowed_t = container_flags_t<details::container::flags::borrowed>;
 
+/**
+ * Disables mutable operations on the container adaptor
+ */
 using readonly_t = container_flags_t<details::container::flags::readonly>;
 
+/**
+ * Guarantees container adaptor member functions (excl. ctors) are noexcept in
+ * both python and C++
+ */
 using nothrow_t = container_flags_t<details::container::flags::nothrow>;
 
 LEV_HIDDEN inline constexpr none_t none{};

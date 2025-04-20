@@ -62,6 +62,17 @@ LEV_HIDDEN std::span<PyObject* const> items(unmanaged_ptr<PyTupleObject> tuple,
 
     return span;
 }
+
+template <size_t E>
+LEV_HIDDEN inline constexpr auto default_flag() noexcept {
+    return container_flags::nothrow;
+}
+
+template <>
+LEV_HIDDEN constexpr auto default_flag<dynamic_extent>() noexcept {
+    return container_flags::none;
+}
+
 } // namespace details::aggregate
 
 template <identifiable_pyobj_type... Ts>
@@ -74,8 +85,8 @@ protected:
 
     LEV_HIDE_INSTANTIATION constexpr ~tuple_policy() noexcept = default;
 
-    LEV_HIDE_INSTANTIATION static std::span<PyObject* const, sizeof...(Ts)>
-    to_span(unmanaged_ptr<PyTupleObject> ptr) {
+    LEV_HIDE_INSTANTIATION static std::span<PyObject* const, sizeof...(Ts)> to_span(
+        unmanaged_ptr<PyTupleObject> ptr) {
 
         static constexpr auto E = sizeof...(Ts);
 
@@ -121,11 +132,9 @@ protected:
     template <size_t I>
     using element_t = template_element_t<I, tuple_policy>;
     template <typename U>
-    LEV_HIDE_INSTANTIATION static constexpr size_t count_v =
-        template_count_v<U, tuple_policy>;
+    LEV_HIDE_INSTANTIATION static constexpr size_t count_v = template_count_v<U, tuple_policy>;
     template <typename U>
-    LEV_HIDE_INSTANTIATION static constexpr size_t index_v =
-        template_index_v<U, tuple_policy>;
+    LEV_HIDE_INSTANTIATION static constexpr size_t index_v = template_index_v<U, tuple_policy>;
 };
 
 template <identifiable_pyobj_type T, size_t E = dynamic_extent>
@@ -196,33 +205,42 @@ protected:
         pyobj_derived_from<U, T>;
 };
 
-template <typename Desc, container_options_type auto P = ownership::owned>
+template <typename Desc, auto P = container_flags::none>
 class LEV_API basic_aggregate;
 
 template <pyobj_type... Ts>
-using tuple =
-    basic_aggregate<tuple_policy<Ts...>, ownership::owned | access::readonly>;
+using aggregate = basic_aggregate<tuple_policy<Ts...>,
+    container_flags::readonly | container_flags::nothrow>;
 template <pyobj_type... Ts>
-using readonly_tuple = tuple<Ts...>;
+using readonly_aggregate = aggregate<Ts...>;
 
-template <pyobj_type T, size_t N = dynamic_extent>
+template <pyobj_type T, size_t N = dynamic_extent, auto P = default_flag<N>()>
 using array =
-    basic_aggregate<array_policy<T, N>, ownership::owned | access::readonly>;
-template <pyobj_type T, size_t N = dynamic_extent>
-using readonly_array = array<T, N>;
+    basic_aggregate<array_policy<T, N>, container_flags::readonly | P>;
+
+template <pyobj_type T, size_t N = dynamic_extent, auto P = default_flag<N>()>
+using readonly_array = array<T, N, P>;
+
+using tuple = array<PyObject>;
+using readonly_tuple = array<PyObject>;
 
 namespace borrowed {
 template <pyobj_type... Ts>
-using tuple = basic_aggregate<tuple_policy<Ts...>,
-    ownership::borrowed | access::readonly>;
+using aggregate = basic_aggregate<tuple_policy<Ts...>,
+    container_flags::borrowed | container_flags::readonly |
+        container_flags::nothrow>;
 template <pyobj_type... Ts>
-using readonly_tuple = tuple<Ts...>;
+using readonly_aggregate = tuple<Ts...>;
 
-template <pyobj_type T, size_t N = dynamic_extent>
-using array =
-    basic_aggregate<array_policy<T, N>, ownership::borrowed | access::readonly>;
-template <pyobj_type T, size_t N = dynamic_extent>
-using readonly_array = array<T, N>;
+template <pyobj_type T, size_t N = dynamic_extent, auto P = default_flag<N>()>
+using array = basic_aggregate<array_policy<T, N>,
+    container_flags::borrowed | container_flags::readonly | P>;
+
+template <pyobj_type T, size_t N = dynamic_extent, auto P = default_flag<N>()>
+using readonly_array = array<T, N, P>;
+
+using tuple = array<PyObject>;
+using readonly_tuple = array<PyObject>;
 } // namespace borrowed
 
 namespace details::aggregate {
@@ -249,25 +267,33 @@ LEV_HIDDEN inline constexpr bool is_array_policy_v<array_policy<T, E>> = true;
 template <typename T>
 concept aggregate_policy = details::aggregate::is_aggregate_policy_v<T>;
 
-template <aggregate_policy D, container_options_type auto P>
+template <aggregate_policy D, container_flags_type auto P>
 class LEV_API basic_aggregate<D, P> : public D {
-    using options_type = std::remove_cv_t<decltype(P)>;
+    using flags_type = std::remove_cv_t<decltype(P)>;
+    using borrowed_flag = container_flags::borrowed_t;
+    using nothrow_flag = container_flags::nothrow_t;
+    using readonly_flag = container_flags::readonly_t;
+    using instance_type =
+        std::conditional_t<with_container_flags<flags_type, borrowed_flag>,
+            unmanaged_ptr<PyDictObject>, python_ptr<PyDictObject>>;
+    LEV_HIDE_INSTANTIATION static constexpr bool is_nothrow_v =
+        with_container_flags<flags_type, nothrow_flag>;
+
     using descriptor_type = D;
     using typename descriptor_type::span_type;
-    using instance_type = std::conditional_t<
-        with_container_options<options_type, ownership::owned_t>,
-        python_ptr<PyTupleObject>, unmanaged_ptr<PyTupleObject>>;
-    static_assert(
-        with_container_options<options_type, options_type, access::readonly_t>,
-        "Aggregates cannot be mutable");
+    static_assert(descriptor_type::extent == dynamic_extent
+            ? with_container_flags<flags_type, readonly_flag>
+            : with_container_flags<flags_type, readonly_flag, nothrow_flag>,
+        "Invalid container flags");
 
     template <typename, auto>
     friend class basic_aggregate;
     struct private_tag_t {};
+
     LEV_HIDE_INSTANTIATION static constexpr private_tag_t private_tag{};
 
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        private_tag_t, auto&& ptr, span_type span) noexcept
+        private_tag_t tag [[maybe_unused]], auto&& ptr, span_type span) noexcept
     requires (span_type::extent == dynamic_extent &&
                  descriptor_type::extent != dynamic_extent)
     LEV_CONTRACT_PRE(span.empty() || ptr)
@@ -278,7 +304,7 @@ class LEV_API basic_aggregate<D, P> : public D {
         LEV_ASSERT(span_.size() == descriptor_type::extent);
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(private_tag_t,
+    LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(private_tag_t tag [[maybe_unused]],
         auto&& ptr, span_type span) noexcept
         LEV_CONTRACT_PRE(span.empty() || ptr) :
         instance_{std::forward<decltype(ptr)>(ptr)},
@@ -287,60 +313,40 @@ class LEV_API basic_aggregate<D, P> : public D {
     }
 
 public:
+    LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(decltype(nullptr)) noexcept = delete;
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
         basic_aggregate const&) noexcept = default;
-    LEV_HIDE_INSTANTIATION
-    [[clang::reinitializes]] inline constexpr basic_aggregate& operator=(
+    LEV_HIDE_INSTANTIATION LEV_REINITIALIZES inline constexpr basic_aggregate& operator=(
         basic_aggregate const&) noexcept = default;
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
         basic_aggregate&&) noexcept = default;
-    LEV_HIDE_INSTANTIATION
-    [[clang::reinitializes]] inline constexpr basic_aggregate& operator=(
+    LEV_HIDE_INSTANTIATION LEV_REINITIALIZES inline constexpr basic_aggregate& operator=(
         basic_aggregate&&) noexcept = default;
 
-    LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        python_ptr<PyTupleObject>&& ptr)
-    requires with_container_options<options_type, ownership::owned_t>
-        : instance_{std::move(ptr)}
-        , span_{descriptor_type::to_span(instance_.get())} {}
+    LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(python_ptr<PyTupleObject>&& ptr)
+    requires without_container_flags<flags_type, borrowed_flag>
+        : basic_aggregate{[&]() {
+            auto const span = descriptor_type::to_span(ptr.get());
+            return basic_aggregate{private_tag, std::move(ptr), span};
+        }()} {}
+
+    LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(python_ptr<PyTupleObject> const& ptr)
+        : basic_aggregate{private_tag, python_ptr<PyTupleObject>(ptr),
+              descriptor_type::to_span(ptr.get())} {}
 
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
         python_ptr<PyTupleObject> const& ptr LEV_LIFETIMEBOUND)
-    requires with_container_options<options_type, ownership::borrowed_t>
-        : basic_aggregate{ptr.get()} {}
-
-    LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        python_ptr<PyTupleObject> const& ptr)
-        : basic_aggregate(python_ptr<PyTupleObject>(ptr)) {}
-
-    template <pyobj_derived_from<PyTupleObject> U>
-    requires with_container_options<options_type, ownership::owned_t>
-    LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(python_ptr<U>&& ptr)
-        : instance_{__LEV static_ptr_cast<PyTupleObject>(std::move(ptr))}
-        , span_{descriptor_type::to_span(instance_.get())} {}
-
-    template <pyobj_derived_from<PyTupleObject> U>
-    requires with_container_options<options_type, ownership::borrowed_t>
-    LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        python_ptr<U> const& ptr LEV_LIFETIMEBOUND)
-        : basic_aggregate(ptr.get()) {}
-
-    template <pyobj_derived_from<PyTupleObject> U>
-    LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        python_ptr<U> const& ptr)
-        : basic_aggregate(python_ptr<U>(ptr)) {}
+    requires with_container_flags<flags_type, borrowed_flag>
+        : basic_aggregate{
+              private_tag, ptr.get(), descriptor_type::to_span(ptr.get())} {}
 
     LEV_HIDE_INSTANTIATION explicit inline constexpr basic_aggregate(
         unmanaged_ptr<PyTupleObject> ptr)
-    requires with_container_options<options_type, ownership::owned_t>
-        : instance_{tag, ptr}
-        , span_{descriptor_type::to_span(ptr)} {}
+        : basic_aggregate{__LEV adopt(ptr)} {}
 
-    LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        unmanaged_ptr<PyTupleObject> ptr)
-    requires with_container_options<options_type, ownership::borrowed_t>
-        : instance_{ptr}
-        , span_{descriptor_type::to_span(ptr)} {}
+    LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(unmanaged_ptr<PyTupleObject> ptr)
+    requires with_container_flags<flags_type, borrowed_flag>
+        : basic_aggregate(private_tag, ptr, descriptor_type::to_span(ptr)) {}
 
     /**
      * Construct owned tuple from tuple
@@ -348,36 +354,35 @@ public:
 
     template <pyobj_type... Us>
     requires requires {
-        requires with_container_options<options_type, ownership::owned_t>;
+        requires without_container_flags<flags_type, borrowed_flag>;
         requires descriptor_type::template is_pyobject_base_of_v<Us...>;
         requires (descriptor_type::extent == sizeof...(Us) ||
             descriptor_type::extent == dynamic_extent);
     }
     LEV_HIDE_INSTANTIATION explicit inline constexpr basic_aggregate(
-        borrowed::tuple<Us...> other) noexcept
+        borrowed::aggregate<Us...> other) noexcept
         : basic_aggregate{
               private_tag, __LEV adopt(other.instance()), other.span()} {}
 
     template <pyobj_type... Us>
     requires requires {
-        requires with_container_options<options_type, ownership::owned_t>;
+        requires without_container_flags<flags_type, borrowed_flag>;
         requires descriptor_type::template is_pyobject_base_of_v<Us...>;
         requires (descriptor_type::extent == sizeof...(Us) ||
             descriptor_type::extent == dynamic_extent);
     }
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        tuple<Us...> const& other) noexcept
+        aggregate<Us...> const& other) noexcept
         : basic_aggregate{private_tag, other.instance_, other.span()} {}
 
     template <pyobj_type... Us>
     requires requires {
-        requires with_container_options<options_type, ownership::owned_t>;
+        requires without_container_flags<flags_type, borrowed_flag>;
         requires descriptor_type::template is_pyobject_base_of_v<Us...>;
         requires (descriptor_type::extent == sizeof...(Us) ||
             descriptor_type::extent == dynamic_extent);
     }
-    LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        tuple<Us...>&& other) noexcept
+    LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(aggregate<Us...>&& other) noexcept
         : basic_aggregate{
               private_tag, std::move(other.instance_), other.span()} {}
 
@@ -385,35 +390,39 @@ public:
      * Construct owned tuple from array
      */
 
-    template <pyobj_type U, size_t E>
+    template <pyobj_type U, size_t E,
+        container_flags_convertible_to<flags_type> auto Opt>
     requires requires {
-        requires with_container_options<options_type, ownership::owned_t>;
+        requires details::container::acquisition<decltype(Opt), flags_type,
+            borrowed_flag>;
         requires descriptor_type::template is_all_pyobject_base_of_v<U>;
         requires descriptor_type::extent == E || E == dynamic_extent;
     }
     LEV_HIDE_INSTANTIATION explicit inline constexpr basic_aggregate(
-        borrowed::array<U, E> other) noexcept
+        basic_aggregate<array_policy<U, E>, Opt> other) noexcept
         : basic_aggregate{
               private_tag, __LEV adopt(other.instance()), other.span()} {}
 
-    template <pyobj_type U, size_t E>
+    template <pyobj_type U, size_t E,
+        container_flags_convertible_to<flags_type> auto Opt>
     requires requires {
-        requires with_container_options<options_type, ownership::owned_t>;
+        requires without_container_flags<flags_type, borrowed_flag>;
         requires descriptor_type::template is_all_pyobject_base_of_v<U>;
         requires descriptor_type::extent == E || E == dynamic_extent;
     }
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        array<U, E> const& other) noexcept
+        basic_aggregate<array_policy<U, E>, Opt> const& other) noexcept
         : basic_aggregate{private_tag, other.instance_, other.span()} {}
 
-    template <pyobj_type U, size_t E>
+    template <pyobj_type U, size_t E,
+        container_flags_convertible_to<flags_type> auto Opt>
     requires requires {
-        requires with_container_options<options_type, ownership::owned_t>;
+        requires without_container_flags<flags_type, borrowed_flag>;
         requires descriptor_type::template is_all_pyobject_base_of_v<U>;
         requires descriptor_type::extent == E || E == dynamic_extent;
     }
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        array<U, E>&& other) noexcept
+        basic_aggregate<array_policy<U, E>, Opt>&& other) noexcept
         : basic_aggregate{
               private_tag, std::move(other.instance_), other.span()} {}
 
@@ -423,86 +432,97 @@ public:
 
     template <pyobj_type... Us>
     requires requires {
-        requires with_container_options<options_type, ownership::borrowed_t>;
+        requires with_container_flags<flags_type, borrowed_flag>;
         requires descriptor_type::template is_pyobject_base_of_v<Us...>;
         requires (descriptor_type::extent == sizeof...(Us) ||
             descriptor_type::extent == dynamic_extent);
     }
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        tuple<Us...> const& other LEV_LIFETIMEBOUND) noexcept
+        aggregate<Us...> const& other LEV_LIFETIMEBOUND) noexcept
         : basic_aggregate{private_tag, other.instance(), other.span()} {}
 
     template <pyobj_type... Us>
     requires requires {
-        requires with_container_options<options_type, ownership::borrowed_t>;
+        requires with_container_flags<flags_type, borrowed_flag>;
         requires descriptor_type::template is_pyobject_base_of_v<Us...>;
         requires (descriptor_type::extent == sizeof...(Us) ||
             descriptor_type::extent == dynamic_extent);
     }
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        borrowed::tuple<Us...> other) noexcept
+        borrowed::aggregate<Us...> other) noexcept
         : basic_aggregate{private_tag, other.instance(), other.span()} {}
 
     /**
      * Construct borrowed tuple from array
      */
 
-    template <pyobj_type U, size_t E>
+    template <pyobj_type U, size_t E,
+        container_flags_convertible_to<flags_type> auto Opt>
     requires requires {
-        requires with_container_options<options_type, ownership::borrowed_t>;
+        requires details::container::removal<decltype(Opt), flags_type,
+            borrowed_flag>;
         requires descriptor_type::template is_all_pyobject_base_of_v<U>;
         requires descriptor_type::extent == E || E == dynamic_extent;
     }
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        tuple<Us...> const& other LEV_LIFETIMEBOUND) noexcept
+        basic_aggregate<array_policy<U, E>, Opt> const& other
+            LEV_LIFETIMEBOUND) noexcept
         : basic_aggregate{private_tag, other.instance(), other.span()} {}
 
-    template <pyobj_type U, size_t E>
+    template <pyobj_type U, size_t E,
+        container_flags_convertible_to<flags_type> auto Opt>
     requires requires {
-        requires with_container_options<options_type, ownership::borrowed_t>;
+        requires details::container::maintenance<decltype(Opt), flags_type,
+            borrowed_flag>;
         requires descriptor_type::template is_all_pyobject_base_of_v<U>;
         requires descriptor_type::extent == E || E == dynamic_extent;
     }
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        borrowed::tuple<Us...> other) noexcept
+        basic_aggregate<array_policy<U, E>, Opt> other) noexcept
         : basic_aggregate{private_tag, other.instance(), other.span()} {}
 
     /**
      * Construct owned array from array
      */
 
-    template <pyobj_type U, size_t E>
+    template <pyobj_type U, size_t E,
+        container_flags_convertible_to<flags_type> auto Opt>
     requires requires {
-        requires with_container_options<options_type, ownership::owned_t>;
+        requires details::container::acquisition<decltype(Opt), flags_type,
+            borrowed_flag>;
         requires descriptor_type::template is_all_pyobject_base_of_v<U>;
         requires (descriptor_type::extent == E ||
             descriptor_type::extent == dynamic_extent || E == dynamic_extent);
     }
     LEV_HIDE_INSTANTIATION explicit inline constexpr basic_aggregate(
-        borrowed::array<U, E> other) noexcept
+        basic_aggregate<array_policy<U, E>, Opt> other) noexcept
         : basic_aggregate{
               private_tag, __LEV adopt(other.instance()), other.span()} {}
 
-    template <pyobj_type U, size_t E>
+    template <pyobj_type U, size_t E,
+        container_flags_convertible_to<flags_type> auto Opt>
     requires requires {
-        requires with_container_options<options_type, ownership::owned_t>;
+        requires details::container::exclusion<decltype(Opt), flags_type,
+            borrowed_flag>;
         requires descriptor_type::template is_all_pyobject_base_of_v<U>;
         requires (descriptor_type::extent == E ||
             descriptor_type::extent == dynamic_extent || E == dynamic_extent);
     }
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        array<U, E> const& other) noexcept
+        basic_aggregate<array_policy<U, E>, Opt> const& other) noexcept
         : basic_aggregate{private_tag, other.instance_, other.span()} {}
 
-    template <pyobj_type U, size_t E>
+    template <pyobj_type U, size_t E,
+        container_flags_convertible_to<flags_type> auto Opt>
     requires requires {
-        requires with_container_options<options_type, ownership::owned_t>;
+        requires details::container::exclusion<decltype(Opt), flags_type,
+            borrowed_flag>;
         requires descriptor_type::template is_all_pyobject_base_of_v<U>;
         requires (descriptor_type::extent == E ||
             descriptor_type::extent == dynamic_extent || E == dynamic_extent);
     }
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        array<U, E>&& other) noexcept
+        basic_aggregate<array_policy<U, E>, Opt>&& other) noexcept
         : basic_aggregate{
               private_tag, std::move(other.instance_), other.span()} {}
 
@@ -512,36 +532,35 @@ public:
 
     template <pyobj_type... Us>
     requires requires {
-        requires with_container_options<options_type, ownership::owned_t>;
+        requires without_container_flags<flags_type, borrowed_flag>;
         requires descriptor_type::template is_pyobject_base_of_v<Us...>;
         requires (descriptor_type::extent == sizeof...(Us) ||
             descriptor_type::extent == dynamic_extent);
     }
     LEV_HIDE_INSTANTIATION explicit inline constexpr basic_aggregate(
-        borrowed::tuple<Us...> other) noexcept
+        borrowed::aggregate<Us...> other) noexcept
         : basic_aggregate{
               private_tag, __LEV adopt(other.instance()), other.span()} {}
 
     template <pyobj_type... Us>
     requires requires {
-        requires with_container_options<options_type, ownership::owned_t>;
+        requires without_container_flags<flags_type, borrowed_flag>;
         requires descriptor_type::template is_pyobject_base_of_v<Us...>;
         requires (descriptor_type::extent == sizeof...(Us) ||
             descriptor_type::extent == dynamic_extent);
     }
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        tuple<Us...> const& other) noexcept
+        aggregate<Us...> const& other) noexcept
         : basic_aggregate{private_tag, other.instance_, other.span()} {}
 
     template <pyobj_type... Us>
     requires requires {
-        requires with_container_options<options_type, ownership::owned_t>;
+        requires without_container_flags<flags_type, borrowed_flag>;
         requires descriptor_type::template is_pyobject_base_of_v<Us...>;
         requires (descriptor_type::extent == sizeof...(Us) ||
             descriptor_type::extent == dynamic_extent);
     }
-    LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        tuple<Us...>&& other) noexcept
+    LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(aggregate<Us...>&& other) noexcept
         : basic_aggregate{
               private_tag, std::move(other.instance_), other.span()} {}
 
@@ -549,26 +568,31 @@ public:
      * Construct borrowed array from array
      */
 
-    template <pyobj_type U, size_t E>
+    template <pyobj_type U, size_t E,
+        container_flags_convertible_to<flags_type> auto Opt>
     requires requires {
-        requires with_container_options<options_type, ownership::borrowed_t>;
+        requires details::container::acquisition<decltype(Opt), flags_type,
+            borrowed_flag>;
         requires descriptor_type::template is_all_pyobject_base_of_v<U>;
         requires (descriptor_type::extent == E ||
             descriptor_type::extent == dynamic_extent || E == dynamic_extent);
     }
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        array<U, E> const& other LEV_LIFETIMEBOUND) noexcept
+        basic_aggregate<array_policy<U, E>, Opt> const& other
+            LEV_LIFETIMEBOUND) noexcept
         : basic_aggregate{private_tag, other.instance(), other.span()} {}
 
-    template <pyobj_type U, size_t E>
+    template <pyobj_type U, size_t E,
+        container_flags_convertible_to<flags_type> auto Opt>
     requires requires {
-        requires with_container_options<options_type, ownership::borrowed_t>;
+        requires details::container::maintenance<decltype(Opt), flags_type,
+            borrowed_flag>;
         requires descriptor_type::template is_all_pyobject_base_of_v<U>;
         requires (descriptor_type::extent == E ||
             descriptor_type::extent == dynamic_extent || E == dynamic_extent);
     }
     LEV_HIDE_INSTANTIATION explicit inline constexpr basic_aggregate(
-        borrowed::array<U, E> other) noexcept
+        basic_aggregate<array_policy<U, E>, Opt> other) noexcept
         : basic_aggregate{private_tag, other.instance(), other.span()} {}
 
     /**
@@ -576,35 +600,32 @@ public:
      */
     template <pyobj_type... Us>
     requires requires {
-        requires with_container_options<options_type, ownership::borrowed_t>;
+        requires with_container_flags<flags_type, borrowed_flag>;
         requires descriptor_type::template is_pyobject_base_of_v<Us...>;
         requires (descriptor_type::extent == sizeof...(Us) ||
             descriptor_type::extent == dynamic_extent);
     }
     LEV_HIDE_INSTANTIATION explicit inline constexpr basic_aggregate(
-        borrowed::tuple<Us...> other) noexcept
+        borrowed::aggregate<Us...> other) noexcept
         : basic_aggregate{private_tag, other.instance(), other.span()} {}
 
     template <pyobj_type... Us>
     requires requires {
-        requires with_container_options<options_type, ownership::borrowed_t>;
+        requires with_container_flags<flags_type, borrowed_flag>;
         requires descriptor_type::template is_pyobject_base_of_v<Us...>;
         requires (descriptor_type::extent == sizeof...(Us) ||
             descriptor_type::extent == dynamic_extent);
     }
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
-        tuple<Us...> const& other LEV_LIFETIMEBOUND) noexcept
+        aggregate<Us...> const& other LEV_LIFETIMEBOUND) noexcept
         : basic_aggregate{private_tag, other.instance(), other.span()} {}
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr bool
-    empty() const noexcept {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr bool empty() const noexcept {
         return size() == 0;
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr size_t
-    size() const noexcept {
-        if constexpr (with_container_options<options_type,
-                          ownership::owned_t>) {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr size_t size() const noexcept {
+        if constexpr (without_container_flags<flags_type, borrowed_flag>) {
             // move operation can clear the instance but leave the span
             return instance_ ? span_.size() : 0u;
         } else {
@@ -613,55 +634,52 @@ public:
     }
 
     LEV_HIDE_INSTANTIATION
-    LEV_PURE [[nodiscard]] inline constexpr unmanaged_ptr<PyTupleObject>
-    instance() const noexcept LEV_LIFETIMEBOUND
-    requires with_container_options<options_type, ownership::owned_t>
-    {
+        LEV_PURE [[nodiscard]] inline constexpr unmanaged_ptr<PyTupleObject>
+    instance() const noexcept LEV_LIFETIMEBOUND {
         return instance_.get();
     }
 
     LEV_HIDE_INSTANTIATION
-    LEV_PURE [[nodiscard]] inline constexpr unmanaged_ptr<PyTupleObject>
-    instance() const noexcept {
+        LEV_PURE [[nodiscard]] inline constexpr unmanaged_ptr<PyTupleObject>
+    instance() const noexcept
+    requires with_container_flags<flags_type, borrowed_flag>
+    {
         return instance_.get();
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr span_type
-    span() const noexcept LEV_LIFETIMEBOUND
-    requires with_container_options<options_type, ownership::owned_t>
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr span_type span() const noexcept LEV_LIFETIMEBOUND
+        LEV_CONTRACT_PRE(span_.empty() || instance_) {
+        return span_;
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr span_type span() const noexcept
+    requires with_container_flags<flags_type, borrowed_flag>
     LEV_CONTRACT_PRE(span_.empty() || instance_) {
         return span_;
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr span_type
-    span() const noexcept LEV_CONTRACT_PRE(span_.empty() || instance_) {
-        return span_;
-    }
-
     template <size_t I>
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] friend auto get(
-        basic_aggregate const& tuple) noexcept LEV_LIFETIMEBOUND
+        basic_aggregate const& tuple LEV_LIFETIMEBOUND) noexcept
     requires requires {
-        requires with_container_options<options_type, ownership::owned_t>;
+        requires without_container_flags<flags_type, borrowed_flag>;
         requires descriptor_type::extent != dynamic_extent;
     }
     {
         if constexpr (is_array_policy_v<descriptor_type>) {
-            return __LEV
-                static_ptr_cast<typename descriptor_type::element_type>(
-                    tuple.span_[I]);
+            return __LEV static_ptr_cast<
+                typename descriptor_type::element_type>(tuple.span_[I]);
         } else {
-            return __LEV
-                static_ptr_cast<typename descriptor_type::element_t<I>>(
-                    tuple.span_[I]);
+            return __LEV static_ptr_cast<
+                typename descriptor_type::element_t<I>>(tuple.span_[I]);
         }
     }
 
     template <pyobj_type U>
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] friend unmanaged_ptr<U> get(
-        basic_aggregate const& tuple) noexcept LEV_LIFETIMEBOUND
+        basic_aggregate const& tuple LEV_LIFETIMEBOUND) noexcept
     requires requires {
-        requires with_container_options<options_type, ownership::owned_t>;
+        requires without_container_flags<flags_type, borrowed_flag>;
         requires details::aggregate::is_tuple_policy_v<descriptor_type>;
         requires descriptor_type::template count_v<U> == 1;
     }
@@ -671,140 +689,193 @@ public:
     }
 
     template <size_t I>
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] friend void get(
-        basic_aggregate&& tuple) noexcept LEV_LIFETIMEBOUND
-    requires requires {
-        requires descriptor_type::extent != dynamic_extent;
-        requires with_container_options<options_type, ownership::owned_t>;
-    }
-    = delete;
-
-    template <pyobj_type U>
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] friend unmanaged_ptr<U> get(
-        basic_aggregate&& tuple) noexcept LEV_LIFETIMEBOUND
-    requires requires {
-        requires with_container_options<options_type, ownership::owned_t>;
-        requires details::aggregate::is_tuple_policy_v<descriptor_type>;
-        requires descriptor_type::template count_v<U> == 1;
-    }
-    = delete;
-
-    template <size_t I>
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] friend auto get(
-        basic_aggregate const& tuple) noexcept
-    requires requires {
-        requires with_container_options<options_type, ownership::borrowed_t>;
-        requires descriptor_type::extent != dynamic_extent;
-    }
-    {
-        if constexpr (is_array_policy_v<descriptor_type>) {
-            return __LEV
-                static_ptr_cast<typename descriptor_type::element_type>(
-                    tuple.span_[I]);
-        } else {
-            return __LEV
-                static_ptr_cast<typename descriptor_type::element_t<I>>(
-                    tuple.span_[I]);
-        }
-    }
-
-    template <pyobj_type U>
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] friend unmanaged_ptr<U> get(
-        basic_aggregate const& tuple) noexcept
-    requires requires {
-        requires with_container_options<options_type, ownership::borrowed_t>;
-        requires details::aggregate::is_tuple_policy_v<descriptor_type>;
-        requires descriptor_type::template count_v<U> == 1;
-    }
-    {
-        return __LEV static_ptr_cast<U>(
-            tuple.span_[descriptor_type::template index_v<U>]);
-    }
-
     LEV_HIDE_INSTANTIATION
-    LEV_PURE [[nodiscard]] inline constexpr auto operator[](
+        LEV_PURE [[nodiscard]] friend void get(basic_aggregate&& tuple) noexcept
+    requires requires {
+        requires without_container_flags<flags_type, borrowed_flag>;
+        requires descriptor_type::extent != dynamic_extent;
+    }
+    = delete;
+
+    template <pyobj_type U>
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] friend unmanaged_ptr<U> get(
+        basic_aggregate&& tuple) noexcept
+    requires requires {
+        requires without_container_flags<flags_type, borrowed_flag>;
+        requires details::aggregate::is_tuple_policy_v<descriptor_type>;
+    }
+    = delete;
+
+    template <size_t I>
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] friend auto get(
+        basic_aggregate const& tuple) noexcept
+    requires requires {
+        requires with_container_flags<flags_type, borrowed_flag>;
+        requires descriptor_type::extent != dynamic_extent;
+    }
+    {
+        if constexpr (is_array_policy_v<descriptor_type>) {
+            return __LEV static_ptr_cast<
+                typename descriptor_type::element_type>(tuple.span_[I]);
+        } else {
+            return __LEV static_ptr_cast<
+                typename descriptor_type::element_t<I>>(tuple.span_[I]);
+        }
+    }
+
+    template <pyobj_type U>
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] friend unmanaged_ptr<U> get(
+        basic_aggregate const& tuple) noexcept
+    requires requires {
+        requires with_container_flags<flags_type, borrowed_flag>;
+        requires details::aggregate::is_tuple_policy_v<descriptor_type>;
+        requires descriptor_type::template count_v<U> == 1;
+    }
+    {
+        return __LEV static_ptr_cast<U>(
+            tuple.span_[descriptor_type::template index_v<U>]);
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto operator[](
         size_t idx) const noexcept
     requires details::aggregate::is_array_policy_v<descriptor_type>
     LEV_CONTRACT_PRE(idx < this->size()) {
+        LEV_ASSERT(idx < this->size());
         if constexpr (descriptor_type::extent != dynamic_extent) {
-            return __LEV
-                static_ptr_cast<typename descriptor_type::element_type>(
-                    span_[idx]);
+            return __LEV static_ptr_cast<
+                typename descriptor_type::element_type>(span_[idx]);
         } else {
-            return __LEV
-                dynamic_ptr_cast<typename descriptor_type::element_type>(
-                    span_[idx]);
+            return __LEV dynamic_ptr_cast<
+                typename descriptor_type::element_type>(span_[idx]);
         }
     }
 
-    LEV_HIDE_INSTANTIATION
-    LEV_PURE [[nodiscard]] inline constexpr auto at(size_t idx) const
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto at(size_t idx) const
+        noexcept(is_nothrow_v)
     requires details::aggregate::is_array_policy_v<descriptor_type>
     LEV_CONTRACT_PRE(idx < this->size()) {
+        LEV_ASSERT(idx < this->size());
         if constexpr (descriptor_type::extent != dynamic_extent) {
-            return __LEV
-                static_ptr_cast<typename descriptor_type::element_type>(
-                    span_[idx]);
+            return __LEV static_ptr_cast<
+                typename descriptor_type::element_type>(span_[idx]);
+        } else if (auto ptr = __LEV dynamic_ptr_cast<
+                       typename descriptor_type::element_type>(span_[idx])) {
+            return ptr;
+        } else if constexpr (is_nothrow_v) {
+            return ptr;
+        } else if (span_[idx] == nullptr) {
+            return ptr;
         } else {
-            return __LEV
-                dynamic_ptr_cast<typename descriptor_type::element_type>(
-                    span_[idx]);
+            failure<type_error, PyExc_TypeError>(
+                format_cstring("The associated value does not have the "
+                               "expected type, Expected=[%s], Retrieved=[%s]",
+                    type_object<T>()->tp_name, Py_TYPE(span_[idx])->tp_name)
+                    .data());
         }
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
-    begin() const LEV_LIFETIMEBOUND
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto begin() const LEV_LIFETIMEBOUND
     requires details::aggregate::is_array_policy_v<descriptor_type>
     {
         return typename descriptor_type::iterator{span_.data()};
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
-    end() const LEV_LIFETIMEBOUND
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto end() const LEV_LIFETIMEBOUND
     requires details::aggregate::is_array_policy_v<descriptor_type>
     {
         return typename descriptor_type::iterator{span_.data() + span_.size()};
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
-    cbegin() const LEV_LIFETIMEBOUND
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto cbegin() const LEV_LIFETIMEBOUND
     requires details::aggregate::is_array_policy_v<descriptor_type>
     {
         return typename descriptor_type::const_iterator{span_.data()};
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
-    cend() const LEV_LIFETIMEBOUND
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto cend() const LEV_LIFETIMEBOUND
     requires details::aggregate::is_array_policy_v<descriptor_type>
     {
         return typename descriptor_type::const_iterator{
             span_.data() + span_.size()};
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
-    rbegin() const LEV_LIFETIMEBOUND
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto rbegin() const LEV_LIFETIMEBOUND
     requires details::aggregate::is_array_policy_v<descriptor_type>
     {
         return typename descriptor_type::reverse_iterator{end()};
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
-    rend() const LEV_LIFETIMEBOUND
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto rend() const LEV_LIFETIMEBOUND
     requires details::aggregate::is_array_policy_v<descriptor_type>
     {
         return typename descriptor_type::reverse_iterator{begin()};
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
-    crbegin() const LEV_LIFETIMEBOUND
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto crbegin() const LEV_LIFETIMEBOUND
     requires details::aggregate::is_array_policy_v<descriptor_type>
     {
         return typename descriptor_type::const_reverse_iterator{end()};
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto
-    crend() const LEV_LIFETIMEBOUND
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto crend() const LEV_LIFETIMEBOUND
     requires details::aggregate::is_array_policy_v<descriptor_type>
+    {
+        return typename descriptor_type::const_reverse_iterator{begin()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto begin() const
+    requires details::aggregate::is_array_policy_v<descriptor_type> &&
+        with_container_flags<flags_type, borrowed_flag>
+    {
+        return typename descriptor_type::iterator{span_.data()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto end() const
+    requires details::aggregate::is_array_policy_v<descriptor_type> &&
+        with_container_flags<flags_type, borrowed_flag>
+    {
+        return typename descriptor_type::iterator{span_.data() + span_.size()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto cbegin() const
+    requires details::aggregate::is_array_policy_v<descriptor_type> &&
+        with_container_flags<flags_type, borrowed_flag>
+    {
+        return typename descriptor_type::const_iterator{span_.data()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto cend() const
+    requires details::aggregate::is_array_policy_v<descriptor_type> &&
+        with_container_flags<flags_type, borrowed_flag>
+    {
+        return typename descriptor_type::const_iterator{
+            span_.data() + span_.size()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto rbegin() const
+    requires details::aggregate::is_array_policy_v<descriptor_type> &&
+        with_container_flags<flags_type, borrowed_flag>
+    {
+        return typename descriptor_type::reverse_iterator{end()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto rend() const
+    requires details::aggregate::is_array_policy_v<descriptor_type> &&
+        with_container_flags<flags_type, borrowed_flag>
+    {
+        return typename descriptor_type::reverse_iterator{begin()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto crbegin() const
+    requires details::aggregate::is_array_policy_v<descriptor_type> &&
+        with_container_flags<flags_type, borrowed_flag>
+    {
+        return typename descriptor_type::const_reverse_iterator{end()};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto crend() const
+    requires details::aggregate::is_array_policy_v<descriptor_type> &&
+        with_container_flags<flags_type, borrowed_flag>
     {
         return typename descriptor_type::const_reverse_iterator{begin()};
     }
@@ -817,41 +888,41 @@ private:
 } // namespace py
 } // namespace lev
 
-template <lev::pyobj_type... Ts>
-struct std::tuple_size<lev::py::tuple<Ts...>> :
+template <__LEV pyobj_type... Ts>
+struct std::tuple_size<__LEV py::aggregate<Ts...>> :
     __LTL size_constant<sizeof...(Ts)> {};
-template <lev::pyobj_type... Ts>
-struct std::tuple_size<lev::py::borrowed::tuple<Ts...>> :
+template <__LEV pyobj_type... Ts>
+struct std::tuple_size<__LEV py::borrowed::aggregate<Ts...>> :
     __LTL size_constant<sizeof...(Ts)> {};
 
-template <lev::pyobj_type T, size_t N>
-requires (N != lev::dynamic_extent)
-struct std::tuple_size<lev::py::array<T, N>> : lev::size_constant<N> {};
+template <__LEV pyobj_type T, size_t N>
+requires (N != __LEV dynamic_extent)
+struct std::tuple_size<__LEV py::array<T, N>> : __LEV size_constant<N> {};
 
-template <lev::pyobj_type T, size_t N>
-requires (N != lev::dynamic_extent)
-struct std::tuple_size<lev::py::borrowed::array<T, N>> :
+template <__LEV pyobj_type T, size_t N>
+requires (N != __LEV dynamic_extent)
+struct std::tuple_size<__LEV py::borrowed::array<T, N>> :
     __LTL size_constant<N> {};
 
-template <size_t I, lev::pyobj_type... Ts>
-struct std::tuple_element<I, lev::py::tuple<Ts...>> {
-    using type = lev::template_element_t<I, lev::py::tuple<Ts...>>;
+template <size_t I, __LEV pyobj_type... Ts>
+struct std::tuple_element<I, __LEV py::tuple<Ts...>> {
+    using type = __LEV template_element_t<I, __LEV py::aggregate<Ts...>>;
 };
 
-template <size_t I, lev::pyobj_type... Ts>
-struct std::tuple_element<I, lev::py::borrowed_tuple<Ts...>> {
-    using type = lev::template_element_t<I, lev::py::tuple<Ts...>>;
+template <size_t I, __LEV pyobj_type... Ts>
+struct std::tuple_element<I, __LEV py::borrowed_tuple<Ts...>> {
+    using type = __LEV template_element_t<I, __LEV py::aggregate<Ts...>>;
 };
 
-template <size_t I, lev::pyobj_type T, size_t N>
-requires (N != lev::dynamic_extent)
-struct std::tuple_element<I, lev::py::array<T, N>> {
+template <size_t I, __LEV pyobj_type T, size_t N>
+requires (N != __LEV dynamic_extent)
+struct std::tuple_element<I, __LEV py::array<T, N>> {
     using type = unmanaged_ptr<T>;
 };
 
-template <lev::pyobj_type T, size_t N>
-requires (N != lev::dynamic_extent)
-struct std::tuple_element<I, lev::py::borrowed::array<T, N>> {
+template <__LEV pyobj_type T, size_t N>
+requires (N != __LEV dynamic_extent)
+struct std::tuple_element<I, __LEV py::borrowed::array<T, N>> {
     using type = unmanaged_ptr<T>;
 };
 

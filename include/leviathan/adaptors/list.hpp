@@ -40,7 +40,7 @@ using basic_readonly_list = __LEV py::basic_list<T,
 
 } // namespace borrowed
 
-template <pyobj_type T, container_flags_type auto P>
+template <identifiable_pyobj_type T, container_flags_type auto P>
 class LEV_API basic_list<T, P> {
     using flags_type = std::remove_cv_t<decltype(P)>;
     using borrowed_flag = container_flags::borrowed_t;
@@ -527,6 +527,94 @@ public:
     LEV_CONSTRACT_PRE(instance_ && !empty() && idx < size()) {
         LEV_ASSERT(instance_ && !empty() && idx < size());
         return reference_proxy{instance_->ob_item[idx]};
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr unmanaged_ptr<T> at(
+        size_type idx) const noexcept(is_nothrow_v)
+        LEV_LIFETIMEBOUND LEV_CONSTRACT_PRE(instance_ && !empty() && idx < size()) {
+        LEV_ASSERT(instance_ && !empty() && idx < size());
+        if (auto ptr = dynamic_ptr_cast<T>(instance_->ob_item[idx])) {
+            return ptr;
+        } else if constexpr (is_nothrow_v) {
+            return ptr;
+        } else if (instance_->ob_item[idx] == nullptr) {
+            return ptr;
+        } else {
+            failure<type_error, PyExc_TypeError>(
+                format_cstring("The associated value does not have the "
+                               "expected type, Expected=[%s], Retrieved=[%s]",
+                    type_object<T>()->tp_name,
+                    Py_TYPE(instance_->ob_item[idx])->tp_name)
+                    .data());
+        }
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr unmanaged_ptr<T> at(
+        size_type idx) const noexcept(is_nothrow_v)
+    requires with_container_flags<flags_type, borrowed_flag>
+    LEV_CONSTRACT_PRE(instance_ && !empty() && idx < size()) {
+        LEV_ASSERT(instance_ && !empty() && idx < size());
+        if (auto ptr = dynamic_ptr_cast<T>(instance_->ob_item[idx])) {
+            return ptr;
+        } else if constexpr (is_nothrow_v) {
+            return ptr;
+        } else if (instance_->ob_item[idx] == nullptr) {
+            return ptr;
+        } else {
+            failure<type_error, PyExc_TypeError>(
+                format_cstring("The associated value does not have the "
+                               "expected type, Expected=[%s], Retrieved=[%s]",
+                    type_object<T>()->tp_name,
+                    Py_TYPE(instance_->ob_item[idx])->tp_name)
+                    .data());
+        }
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto at(size_type idx) noexcept(
+        is_nothrow_v) LEV_LIFETIMEBOUND
+    requires without_container_flags<flags_type, readonly_flag>
+    LEV_CONSTRACT_PRE(instance_ && !empty() && idx < size()) {
+        LEV_ASSERT(instance_ && !empty() && idx < size());
+        if constexpr (is_nothrow_v) {
+            return reference_proxy{instance_->ob_item[idx]};
+        } else if (instance_->ob_item[idx] == nullptr) {
+            return reference_proxy{instance_->ob_item[idx]};
+        } else if (auto ptr = dynamic_ptr_cast<T>(instance_->ob_item[idx])) {
+            return reference_proxy{instance_->ob_item[idx]};
+        } else if (instance_->ob_item[idx] == nullptr) {
+            return ptr;
+        } else {
+            failure<type_error, PyExc_TypeError>(
+                format_cstring("The associated value does not have the "
+                               "expected type, Expected=[%s], Retrieved=[%s]",
+                    type_object<T>()->tp_name,
+                    Py_TYPE(instance_->ob_item[idx])->tp_name)
+                    .data());
+        }
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto at(size_type idx) noexcept(
+        is_nothrow_v)
+    requires without_container_flags<flags_type, readonly_flag> &&
+        with_container_flags<flags_type, borrowed_flag>
+    LEV_CONSTRACT_PRE(instance_ && !empty() && idx < size()) {
+        LEV_ASSERT(instance_ && !empty() && idx < size());
+        if constexpr (is_nothrow_v) {
+            return reference_proxy{instance_->ob_item[idx]};
+        } else if (instance_->ob_item[idx] == nullptr) {
+            return reference_proxy{instance_->ob_item[idx]};
+        } else if (auto ptr = dynamic_ptr_cast<T>(instance_->ob_item[idx])) {
+            return reference_proxy{instance_->ob_item[idx]};
+        } else if (instance_->ob_item[idx] == nullptr) {
+            return ptr;
+        } else {
+            failure<type_error, PyExc_TypeError>(
+                format_cstring("The associated value does not have the "
+                               "expected type, Expected=[%s], Retrieved=[%s]",
+                    type_object<T>()->tp_name,
+                    Py_TYPE(instance_->ob_item[idx])->tp_name)
+                    .data());
+        }
     }
 
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr bool empty() const noexcept {

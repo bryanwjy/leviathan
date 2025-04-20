@@ -74,6 +74,12 @@
 #  define LEV_CONST
 #endif
 
+#if __has_cpp_attribute(clang::reinitializes)
+#  define LEV_REINITIALIZES [[clang::reinitializes]]
+#else
+#  define LEV_REINITIALIZES
+#endif
+
 #if __has_cpp_attribute(gnu::always_inline)
 #  define LEV_ALWAYS_INLINE [[gnu::always_inline]]
 #else

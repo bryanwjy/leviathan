@@ -63,6 +63,14 @@ __UTL_HIDE_FROM_ABI inline constexpr T* construct_at(
 
 namespace ltl {
 
+LEV_HIDDEN [[noreturn]] inline void unreachable() noexcept {
+#ifdef _MSC_VER
+    __assume(0)
+#else
+    __builtin_unreachable();
+#endif
+}
+
 template <typename T>
 T const* addressof(T const&&) = delete;
 

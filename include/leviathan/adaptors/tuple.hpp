@@ -37,11 +37,8 @@ LEV_HIDDEN std::span<PyObject* const> items(unmanaged_ptr<PyTupleObject> tuple,
     // the lifetime of the array because PyTupleObject defines it as a
     // PyObject*[1] member
 
-#ifndef __cpp_lib_start_lifetime_as
-    // warning suppression
-#  define __cpp_lib_start_lifetime_as 0
-#endif
 #if __cpp_lib_start_lifetime_as >= 202207L
+    // TODO: figure out how to avoid including <memory>
     auto ptr = std::start_lifetime_as_array<PyObject*>(
         static_cast<PyObject**>(tuple->ob_item), size);
     return std::span<PyObject* const>{ptr, ptr + size};
@@ -472,7 +469,7 @@ public:
     template <pyobj_type U, size_t E,
         container_flags_convertible_to<flags_type> auto Opt>
     requires requires {
-        requires details::container::maintenance<decltype(Opt), flags_type,
+        requires details::container::retention<decltype(Opt), flags_type,
             borrowed_flag>;
         requires descriptor_type::template is_all_pyobject_base_of_v<U>;
         requires descriptor_type::extent == E || E == dynamic_extent;
@@ -585,7 +582,7 @@ public:
     template <pyobj_type U, size_t E,
         container_flags_convertible_to<flags_type> auto Opt>
     requires requires {
-        requires details::container::maintenance<decltype(Opt), flags_type,
+        requires details::container::retention<decltype(Opt), flags_type,
             borrowed_flag>;
         requires descriptor_type::template is_all_pyobject_base_of_v<U>;
         requires (descriptor_type::extent == E ||
@@ -772,6 +769,15 @@ public:
                     type_object<T>()->tp_name, Py_TYPE(span_[idx])->tp_name)
                     .data());
         }
+    }
+
+    LEV_HIDE_INSTANTIATION friend void swap(
+        basic_aggregate& lhs, basic_aggregate& rhs) noexcept {
+        lhs.swap(other);
+    }
+
+    LEV_HIDE_INSTANTIATION void swap(basic_aggregate& other) noexcept {
+        instance_.swap(other.instance_);
     }
 
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline auto begin() const LEV_LIFETIMEBOUND

@@ -156,3 +156,26 @@
                         0) == nullptr,                                      \
           "Invalid assert expression");
 #endif
+
+#ifndef __cpp_lib_start_lifetime_as
+// warning suppression
+#  define __cpp_lib_start_lifetime_as 0
+#endif
+
+#define LEV_PYTHON_VERSION_GE(MAJOR, MINOR, PATCH) \
+    PY_MAJOR_VERSION > MAJOR ||                    \
+        (PY_MAJOR_VERSION == MAJOR &&              \
+            (PY_MINOR_VERSION > MINOR ||           \
+                (PY_MINOR_VERSION == MINOR && PY_PATCH_VERSION >= PATCH)))
+
+#define LEV_PYTHON_VERSION_GT(MAJOR, MINOR, PATCH) \
+    PY_MAJOR_VERSION > MAJOR ||                    \
+        (PY_MAJOR_VERSION == MAJOR &&              \
+            (PY_MINOR_VERSION > MINOR ||           \
+                (PY_MINOR_VERSION == MINOR && PY_PATCH_VERSION > PATCH)))
+
+#define LEV_PYTHON_VERSION_LT(MAJOR, MINOR, PATCH) \
+    !(LEV_PYTHON_VERSION_GE(MAJOR, MINOR, PATCH))
+
+#define LEV_PYTHON_VERSION_LE(MAJOR, MINOR, PATCH) \
+    !LEV_PYTHON_VERSION_GT(MAJOR, MINOR, PATCH)

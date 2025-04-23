@@ -95,8 +95,7 @@ public:
     template <std::unsigned_integral T>
     requires (!std::is_array_v<underlying_type> &&
         std::constructible_from<underlying_type, T>)
-    LEV_HIDE_INSTANTIATION constexpr explicit bitset(T val) noexcept
-        : storage_{val} {}
+    LEV_HIDE_INSTANTIATION constexpr explicit bitset(T val) noexcept : storage_{val} {}
 
     LEV_HIDE_INSTANTIATION constexpr underlying_type value() const noexcept
     requires (!std::is_array_v<underlying_type>)
@@ -129,7 +128,7 @@ public:
         }
     }
 
-    LEV_HIDE_INSTANTIATION constexpr bool test(size_t idx) noexcept {
+    LEV_HIDE_INSTANTIATION constexpr bool test(size_t idx) const noexcept {
         LEV_ASSERT(idx < N);
         if constexpr (!std::is_array_v<underlying_type>) {
             return storage_ & one_at(idx);

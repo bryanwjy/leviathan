@@ -42,6 +42,8 @@ using basic_readonly_list = __LEV py::basic_list<T,
 
 template <identifiable_pyobj_type T, container_flags_type auto P>
 class LEV_API basic_list<T, P> {
+    template <typename, auto>
+    friend class basic_list;
     using flags_type = std::remove_cv_t<decltype(P)>;
     using borrowed_flag = container_flags::borrowed_t;
     using nothrow_flag = container_flags::nothrow_t;
@@ -250,10 +252,10 @@ public:
 
     LEV_HIDE_INSTANTIATION inline constexpr basic_list(decltype(nullptr)) noexcept = delete;
     LEV_HIDE_INSTANTIATION inline constexpr basic_list(basic_list const&) noexcept = default;
-    LEV_HIDE_INSTANTIATION [[clang::reinitializes]] inline constexpr basic_list& operator=(
+    LEV_HIDE_INSTANTIATION LEV_REINITIALIZES inline constexpr basic_list& operator=(
         basic_list const&) noexcept = default;
     LEV_HIDE_INSTANTIATION inline constexpr basic_list(basic_list&&) noexcept = default;
-    LEV_HIDE_INSTANTIATION [[clang::reinitializes]] inline constexpr basic_list& operator=(
+    LEV_HIDE_INSTANTIATION LEV_REINITIALIZES inline constexpr basic_list& operator=(
         basic_list&&) noexcept = default;
 
     LEV_HIDE_INSTANTIATION inline constexpr basic_list(python_ptr<PyListObject>&& ptr) noexcept
@@ -309,12 +311,12 @@ public:
 
     template <pyobj_derived_from<T> U,
         container_flags_convertible_to<flags_type> auto Opt>
-    requires details::container::maintenance<decltype(Opt), flags_type,
+    requires details::container::retention<decltype(Opt), flags_type,
         borrowed_flag>
     LEV_HIDE_INSTANTIATION inline constexpr basic_list(basic_list<U, Opt> other) noexcept
         : basic_list{other.instance()} {}
 
-    LEV_HIDE_INSTANTIATION inline constexpr basic_list& operator=(
+    LEV_HIDE_INSTANTIATION LEV_REINITIALIZES inline constexpr basic_list& operator=(
         python_ptr<PyListObject>&& ptr) noexcept
     requires without_container_flags<flags_type, borrowed_flag>
     {
@@ -322,7 +324,7 @@ public:
         return *this;
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr basic_list& operator=(
+    LEV_HIDE_INSTANTIATION LEV_REINITIALIZES inline constexpr basic_list& operator=(
         python_ptr<PyListObject> const& ptr) noexcept
     requires without_container_flags<flags_type, borrowed_flag>
     {
@@ -330,7 +332,7 @@ public:
         return *this;
     }
 
-    LEV_HIDE_INSTANTIATION inline constexpr basic_list& operator=(
+    LEV_HIDE_INSTANTIATION LEV_REINITIALIZES inline constexpr basic_list& operator=(
         unmanaged_ptr<PyListObject> ptr) noexcept
     requires without_container_flags<flags_type, borrowed_flag>
     {
@@ -342,7 +344,7 @@ public:
         container_flags_convertible_to<flags_type> auto Opt>
     requires details::container::removal<decltype(Opt), flags_type,
         borrowed_flag>
-    LEV_HIDE_INSTANTIATION inline constexpr basic_list& operator=(
+    LEV_HIDE_INSTANTIATION LEV_REINITIALIZES inline constexpr basic_list& operator=(
         basic_list<U, Opt>&& other) noexcept {
         instance_ = std::move(other.instance_);
         return *this;
@@ -352,7 +354,7 @@ public:
         container_flags_convertible_to<flags_type> auto Opt>
     requires details::container::removal<decltype(Opt), flags_type,
         borrowed_flag>
-    LEV_HIDE_INSTANTIATION inline constexpr basic_list& operator=(
+    LEV_HIDE_INSTANTIATION LEV_REINITIALIZES inline constexpr basic_list& operator=(
         basic_list<U, Opt> const& other) noexcept {
         instance_ = other.instance_;
         return *this;
@@ -751,7 +753,7 @@ public:
         lhs.swap(other);
     }
 
-    LEV_HIDE_INSTANTIATION void swap(basic_list& other) noexcept {
+    LEV_HIDE_INSTANTIATION LEV_REINITIALIZES void swap(basic_list& other) noexcept {
         instance_.swap(other.instance_);
     }
 

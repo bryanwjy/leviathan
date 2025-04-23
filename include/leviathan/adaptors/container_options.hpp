@@ -90,21 +90,9 @@ LEV_HIDDEN inline constexpr readonly_t readonly{};
 
 LEV_HIDDEN inline constexpr nothrow_t nothrow{};
 
-template <typename T>
-struct acquires {};
-template <typename T>
-struct removes {};
-template <typename T>
-struct maintains {};
-template <typename T>
-struct excludes {};
-
 } // namespace container_flags
 
 namespace details::container {
-
-template <typename From, typename To, typename V>
-LEV_HIDDEN inline constexpr bool mutation_v = false;
 
 template <typename O, typename P>
 concept with_flag = container_flag_type<O> && container_flag_type<P> &&
@@ -119,29 +107,9 @@ concept acquisition = without_flag<From, V> && with_flag<To, V>;
 template <typename From, typename To, typename V>
 concept removal = with_flag<From, V> && without_flag<To, V>;
 template <typename From, typename To, typename V>
-concept maintenance = with_flag<From, V> && with_flag<To, V>;
+concept retention = with_flag<From, V> && with_flag<To, V>;
 template <typename From, typename To, typename V>
 concept exclusion = without_flag<From, V> && without_flag<To, V>;
-
-template <container_flags_type V, with_container_flags<V> To,
-    without_container_flags<V> From>
-LEV_HIDDEN inline constexpr bool
-    mutation_v<From, To, container_flags::subsumes<V>> = true;
-
-template <container_flags_type V, without_container_flags<V> To,
-    with_container_flags<V> From>
-LEV_HIDDEN inline constexpr bool
-    mutation_v<From, To, container_flags::discards<V>> = true;
-
-template <container_flags_type V, with_container_flags<V> To,
-    with_container_flags<V> From>
-LEV_HIDDEN inline constexpr bool
-    mutation_v<From, To, container_flags::maintains<V>> = true;
-
-template <container_flags_type V, without_container_flags<V> To,
-    without_container_flags<V> From>
-LEV_HIDDEN inline constexpr bool
-    mutation_v<From, To, container_flags::excludes<V>> = true;
 
 } // namespace details::container
 

@@ -418,7 +418,7 @@ public:
 
     template <pyobj_derived_from<Key> K, pyobj_derived_from<T> V,
         container_flags_convertible_to<flags_type> auto Opt>
-    requires details::container::maintenance<decltype(Opt), flags_type,
+    requires details::container::retention<decltype(Opt), flags_type,
         borrowed_flag>
     LEV_HIDE_INSTANTIATION inline constexpr basic_dict(basic_dict<K, V, Opt> other) noexcept
         : basic_dict{other.instance()} {}
@@ -465,6 +465,14 @@ public:
         basic_dict<K, V, Opt> const& other) noexcept {
         instance_ = other.instance_;
         return *this;
+    }
+
+    LEV_HIDE_INSTANTIATION friend void swap(basic_dict& lhs, basic_dict& rhs) noexcept {
+        lhs.swap(other);
+    }
+
+    LEV_HIDE_INSTANTIATION LEV_REINITIALIZES void swap(basic_dict& other) noexcept {
+        instance_.swap(other.instance_);
     }
 
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr inline auto begin() const noexcept LEV_LIFETIMEBOUND {
@@ -538,7 +546,8 @@ public:
     LEV_HIDE_INSTANTIATION [[nodiscard]] inline constexpr auto find(
         unmanaged_ptr<K> key) noexcept LEV_LIFETIMEBOUND
     requires without_container_flags<flags_type, readonly_flag>
-    {
+    LEV_CONSTRACT_PRE(instance_) {
+        LEV_ASSERT(instance_);
         return details::dict::find<iterator>(instance_.get(), key);
     }
 
@@ -674,8 +683,9 @@ public:
     LEV_HIDE_INSTANTIATION [[nodiscard]] inline reference_proxy operator[](
         unmanaged_ptr<K> key) noexcept LEV_LIFETIMEBOUND
     requires without_container_flags<flags_type, readonly_flag>
-    LEV_CONSTRACT_PRE(key) {
+    LEV_CONSTRACT_PRE(key) LEV_CONSTRACT_PRE(instance_) {
         LEV_ASSERT(key);
+        LEV_ASSERT(instance_);
         unmanaged_ptr<PyObject> value =
             PyDict_SetDefault(instance_, key, Py_None);
         return reference_proxy{instance_, key, value};
@@ -685,8 +695,9 @@ public:
     LEV_HIDE_INSTANTIATION [[nodiscard]] inline reference_proxy operator[](
         unmanaged_ptr<K> key) noexcept
     requires without_container_flags<flags_type, borrowed_flag, readonly_flag>
-    {
+    LEV_CONSTRACT_PRE(key) LEV_CONSTRACT_PRE(instance_) {
         LEV_ASSERT(key);
+        LEV_ASSERT(instance_);
         unmanaged_ptr<PyObject> value =
             PyDict_SetDefault(instance_, key, Py_None);
         return reference_proxy{instance_, key, value};

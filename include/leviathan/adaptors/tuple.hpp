@@ -14,7 +14,8 @@
 
 namespace lev {
 template <>
-inline constexpr PyTypeObject* type_object<PyTupleObject>() noexcept {
+LEV_HIDDEN inline constexpr PyTypeObject*
+type_object<PyTupleObject>() noexcept {
     return &PyTuple_Type;
 }
 
@@ -265,7 +266,7 @@ template <typename T>
 concept aggregate_policy = details::aggregate::is_aggregate_policy_v<T>;
 
 template <aggregate_policy D, container_flags_type auto P>
-class LEV_API basic_aggregate<D, P> : public D {
+class LEV_API basic_aggregate<D, P> : private adaptor_base, public D {
     using flags_type = std::remove_cv_t<decltype(P)>;
     using borrowed_flag = container_flags::borrowed_t;
     using nothrow_flag = container_flags::nothrow_t;
@@ -310,6 +311,8 @@ class LEV_API basic_aggregate<D, P> : public D {
     }
 
 public:
+    using type = PyTupleObject;
+
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(decltype(nullptr)) noexcept = delete;
     LEV_HIDE_INSTANTIATION inline constexpr basic_aggregate(
         basic_aggregate const&) noexcept = default;

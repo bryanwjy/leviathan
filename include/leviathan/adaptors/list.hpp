@@ -13,7 +13,7 @@
 namespace lev {
 
 template <>
-inline constexpr PyTypeObject* type_object<PyListObject>() noexcept {
+LEV_HIDDEN inline constexpr PyTypeObject* type_object<PyListObject>() noexcept {
     return &PyList_Type;
 }
 
@@ -41,7 +41,7 @@ using basic_readonly_list = __LEV py::basic_list<T,
 } // namespace borrowed
 
 template <identifiable_pyobj_type T, container_flags_type auto P>
-class LEV_API basic_list<T, P> {
+class LEV_API basic_list<T, P> : private adaptor_base {
     template <typename, auto>
     friend class basic_list;
     using flags_type = std::remove_cv_t<decltype(P)>;
@@ -239,6 +239,7 @@ class LEV_API basic_list<T, P> {
     }
 
 public:
+    using type = PyListObject;
     using size_type = size_t;
     using difference_type = ptrdiff_t;
     using const_iterator = random_access_const_iterator<T>;
@@ -360,38 +361,54 @@ public:
         return *this;
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto begin() const noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto begin() const noexcept LEV_LIFETIMEBOUND
+    requires without_container_flags<flags_type, borrowed_flag>
+    {
         return cbegin();
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto end() const noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto end() const noexcept LEV_LIFETIMEBOUND
+    requires without_container_flags<flags_type, borrowed_flag>
+    {
         return cend();
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto rbegin() const noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto rbegin() const noexcept LEV_LIFETIMEBOUND
+    requires without_container_flags<flags_type, borrowed_flag>
+    {
         return crbegin();
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto rend() const noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto rend() const noexcept LEV_LIFETIMEBOUND
+    requires without_container_flags<flags_type, borrowed_flag>
+    {
         return crend();
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto cbegin() const noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto cbegin() const noexcept LEV_LIFETIMEBOUND
+    requires without_container_flags<flags_type, borrowed_flag>
+    {
         return instance_ ? const_iterator{instance_->ob_item}
                          : const_iterator{};
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto cend() const noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto cend() const noexcept LEV_LIFETIMEBOUND
+    requires without_container_flags<flags_type, borrowed_flag>
+    {
         return instance_ ? const_iterator{instance_->ob_item + size()}
                          : const_iterator{};
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto crbegin() const noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto crbegin() const noexcept LEV_LIFETIMEBOUND
+    requires without_container_flags<flags_type, borrowed_flag>
+    {
         return instance_ ? const_reverse_iterator{end()}
                          : const_reverse_iterator{};
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto crend() const noexcept LEV_LIFETIMEBOUND {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto crend() const noexcept LEV_LIFETIMEBOUND
+    requires without_container_flags<flags_type, borrowed_flag>
+    {
         return instance_ ? const_reverse_iterator{begin()}
                          : const_reverse_iterator{};
     }
@@ -420,82 +437,62 @@ public:
         return instance_ ? reverse_iterator{begin()} : reverse_iterator{};
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto begin() const noexcept
-    requires with_container_flags<flags_type, borrowed_flag>
-    {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto begin() const noexcept {
         return cbegin();
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto end() const noexcept
-    requires with_container_flags<flags_type, borrowed_flag>
-    {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto end() const noexcept {
         return cend();
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto rbegin() const noexcept
-    requires with_container_flags<flags_type, borrowed_flag>
-    {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto rbegin() const noexcept {
         return crbegin();
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto rend() const noexcept
-    requires with_container_flags<flags_type, borrowed_flag>
-    {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto rend() const noexcept {
         return crend();
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto cbegin() const noexcept
-    requires with_container_flags<flags_type, borrowed_flag>
-    {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto cbegin() const noexcept {
         return instance_ ? const_iterator{instance_->ob_item}
                          : const_iterator{};
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto cend() const noexcept
-    requires with_container_flags<flags_type, borrowed_flag>
-    {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto cend() const noexcept {
         return instance_ ? const_iterator{instance_->ob_item + size()}
                          : const_iterator{};
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto crbegin() const noexcept
-    requires with_container_flags<flags_type, borrowed_flag>
-    {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto crbegin() const noexcept {
         return instance_ ? const_reverse_iterator{end()}
                          : const_reverse_iterator{};
     }
 
-    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto crend() const noexcept
-    requires with_container_flags<flags_type, borrowed_flag>
-    {
+    LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto crend() const noexcept {
         return instance_ ? const_reverse_iterator{begin()}
                          : const_reverse_iterator{};
     }
 
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto begin() noexcept
-    requires with_container_flags<flags_type, borrowed_flag> &&
-        without_container_flags<flags_type, readonly_flag>
+    requires without_container_flags<flags_type, readonly_flag>
     {
         return instance_ ? iterator{instance_->ob_item} : iterator{};
     }
 
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto end() noexcept
-    requires with_container_flags<flags_type, borrowed_flag> &&
-        without_container_flags<flags_type, readonly_flag>
+    requires without_container_flags<flags_type, readonly_flag>
     {
         return instance_ ? iterator{instance_->ob_item + size()} : iterator{};
     }
 
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto rbegin() noexcept
-    requires with_container_flags<flags_type, borrowed_flag> &&
-        without_container_flags<flags_type, readonly_flag>
+    requires without_container_flags<flags_type, readonly_flag>
     {
         return instance_ ? reverse_iterator{end()} : reverse_iterator{};
     }
 
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto rend() noexcept
-    requires with_container_flags<flags_type, borrowed_flag> &&
-        without_container_flags<flags_type, readonly_flag>
+    requires without_container_flags<flags_type, readonly_flag>
     {
         return instance_ ? reverse_iterator{begin()} : reverse_iterator{};
     }
@@ -516,7 +513,7 @@ public:
 
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto operator[](
         size_type idx) noexcept LEV_LIFETIMEBOUND
-    requires without_container_flags<flags_type, readonly_flag>
+    requires without_container_flags<flags_type, readonly_flag, borrowed_flag>
     LEV_CONSTRACT_PRE(instance_ && !empty() && idx < size()) {
         LEV_ASSERT(instance_ && !empty() && idx < size());
         return reference_proxy{instance_->ob_item[idx]};
@@ -524,8 +521,7 @@ public:
 
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto operator[](
         size_type idx) noexcept
-    requires without_container_flags<flags_type, readonly_flag> &&
-        with_container_flags<flags_type, borrowed_flag>
+    requires without_container_flags<flags_type, readonly_flag>
     LEV_CONSTRACT_PRE(instance_ && !empty() && idx < size()) {
         LEV_ASSERT(instance_ && !empty() && idx < size());
         return reference_proxy{instance_->ob_item[idx]};
@@ -574,7 +570,7 @@ public:
 
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto at(size_type idx) noexcept(
         is_nothrow_v) LEV_LIFETIMEBOUND
-    requires without_container_flags<flags_type, readonly_flag>
+    requires without_container_flags<flags_type, readonly_flag, borrowed_flag>
     LEV_CONSTRACT_PRE(instance_ && !empty() && idx < size()) {
         LEV_ASSERT(instance_ && !empty() && idx < size());
         if constexpr (is_nothrow_v) {
@@ -597,8 +593,7 @@ public:
 
     LEV_HIDE_INSTANTIATION LEV_PURE [[nodiscard]] inline constexpr auto at(size_type idx) noexcept(
         is_nothrow_v)
-    requires without_container_flags<flags_type, readonly_flag> &&
-        with_container_flags<flags_type, borrowed_flag>
+    requires without_container_flags<flags_type, readonly_flag>
     LEV_CONSTRACT_PRE(instance_ && !empty() && idx < size()) {
         LEV_ASSERT(instance_ && !empty() && idx < size());
         if constexpr (is_nothrow_v) {

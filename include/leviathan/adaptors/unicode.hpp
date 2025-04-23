@@ -8,12 +8,14 @@
 namespace lev {
 
 template <>
-inline constexpr PyTypeObject* type_object<PyUnicodeObject>() noexcept {
+LEV_HIDDEN inline constexpr PyTypeObject*
+type_object<PyUnicodeObject>() noexcept {
     return &PyUnicode_Type;
 }
 
 template <>
-inline constexpr PyTypeObject* type_object<PyASCIIObject>() noexcept {
+LEV_HIDDEN inline constexpr PyTypeObject*
+type_object<PyASCIIObject>() noexcept {
     return &PyUnicode_Type;
 }
 
@@ -93,7 +95,7 @@ using u32string = basic_unicode<char32_t, container_flags::nothrow>;
  */
 template <typename C, container_flags_type auto P>
 requires std::is_void_v<C> || __LTL is_complete_v<__LTL basic_zstring_view<C>>
-class basic_unicode_t<C, P> {
+class basic_unicode_t<C, P> : private adaptor_base {
     template <typename, auto>
     friend class basic_unicode_t;
     static_assert(with_container_flags<flags_type, readonly_flag>,
@@ -135,6 +137,8 @@ class basic_unicode_t<C, P> {
     }
 
 public:
+    using type = PyUnicodeObject;
+
     LEV_HIDE_INSTANTIATION inline constexpr basic_unicode_t(decltype(nullptr)) noexcept = delete;
     LEV_HIDE_INSTANTIATION inline constexpr basic_unicode_t(
         basic_unicode_t const&) noexcept = default;

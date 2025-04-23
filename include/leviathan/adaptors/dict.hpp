@@ -13,7 +13,7 @@
 
 namespace lev {
 template <>
-inline constexpr PyTypeObject* type_object<PyDictObject>() noexcept {
+LEV_HIDDEN inline constexpr PyTypeObject* type_object<PyDictObject>() noexcept {
     return &PyDict_Type;
 }
 
@@ -303,7 +303,7 @@ LEV_HIDE_INSTANTIATION inline auto find(
 
 template <pyobj_type Key, identifiable_pyobj_type T,
     container_flags_type auto P>
-class basic_dict<Key, T, P> {
+class basic_dict<Key, T, P> : private adaptor_base {
     static_assert(
         !leviathan_pyobj<Key> || adaptor_traits<Key>::hashable::value);
     template <typename, typename, auto>
@@ -341,6 +341,7 @@ class basic_dict<Key, T, P> {
     }
 
 public:
+    using type = PyDictObject;
     using key_type = unmanaged_ptr<Key>;
     using mapped_type = unmanaged_ptr<T>;
     using value_type = std::pair<unmanaged_ptr<Key> const, unmanaged_ptr<T>>;

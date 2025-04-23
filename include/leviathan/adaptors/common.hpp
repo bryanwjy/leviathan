@@ -12,9 +12,6 @@
 namespace lev {
 namespace py {
 
-using ltl::nothrow;
-using typename ltl::nothrow_t;
-
 using size_t = decltype(sizeof(0));
 using ptrdiff_t = decltype(static_cast<char*>(0) - static_cast<char*>(0));
 using ssize_t = std::make_signed_t<size_t>;
@@ -125,5 +122,23 @@ public:
         return *this;
     }
 };
+
+class adaptor_base {
+protected:
+    LEV_HIDE_INSTANTIATION inline constexpr ~adaptor_base() = default;
+};
+
+template <typename T>
+concept adaptor_type = std::is_class_v<T> &&
+    std::is_base_of_v<adaptor_base, T> && requires(T const& adaptor) {
+        typename T::type;
+        requires identifiable_pyobj_type<typename T::type>;
+        { adaptor.instance() } noexcept -> unmanaged_ptr<typename T::type>;
+    };
 } // namespace py
+
+template <py::adaptor_type T>
+LEV_HIDDEN inline constexpr PyTypeObject* type_object() noexcept {
+    return type_object<typename T::type>();
+}
 } // namespace lev

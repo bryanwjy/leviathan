@@ -32,14 +32,11 @@ LEV_HIDDEN inline constexpr bool is_flags_type_v = false;
 template <typename T>
 LEV_HIDDEN inline constexpr bool is_flags_type_v<T const> = is_flags_type_v<T>;
 
-template <container_flags V>
-LEV_HIDDEN inline constexpr bool is_flags_type_v<container_flags_t<V>> = true;
-
 } // namespace details::container
 
 template <details::container::flags V>
 struct container_flags_t :
-    std::intergral_constant<details::container::flags, V> {
+    std::integral_constant<details::container::flags, V> {
 
     template <details::container::flags U>
     friend consteval auto operator|(
@@ -55,8 +52,8 @@ struct container_flags_t :
 };
 
 namespace details::container {
-template <typename O, typename P>
-concept has_flag = ;
+template <container_flags V>
+LEV_HIDDEN inline constexpr bool is_flags_type_v<container_flags_t<V>> = true;
 } // namespace details::container
 
 template <typename T>
@@ -95,11 +92,11 @@ LEV_HIDDEN inline constexpr nothrow_t nothrow{};
 namespace details::container {
 
 template <typename O, typename P>
-concept with_flag = container_flag_type<O> && container_flag_type<P> &&
+concept with_flag = container_flags_type<O> && container_flags_type<P> &&
     (O::value & P::value) == P::value;
 
 template <typename O, typename P>
-concept without_flag = container_flag_type<O> && container_flag_type<P> &&
+concept without_flag = container_flags_type<O> && container_flags_type<P> &&
     (O::value & P::value) == flags::none;
 
 template <typename From, typename To, typename V>
@@ -115,12 +112,12 @@ concept exclusion = without_flag<From, V> && without_flag<To, V>;
 
 template <typename O, typename... Ps>
 concept with_container_flags =
-    (... && container_flag_type<Ps>)&&details::container::with_flag<O,
+    (... && container_flags_type<Ps>)&&details::container::with_flag<O,
         (... | Ps::value)>;
 
 template <typename O, typename... Ps>
 concept without_container_flags =
-    (... && container_flag_type<Ps>)&&details::container::without_flag<O,
+    (... && container_flags_type<Ps>)&&details::container::without_flag<O,
         (... | Ps::value)>;
 
 template <typename From, typename To>
